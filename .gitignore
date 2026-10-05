@@ -1,0 +1,27 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Python and Node artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+node_modules/
+dist/
+build/
+
+# Data and generated outputs
+data/
+raw/
+normalized/
+results/
+artifacts/
+*.parquet
+*.arrow
+*.duckdb
+*.sqlite
+
+# macOS
+.DS_Store
