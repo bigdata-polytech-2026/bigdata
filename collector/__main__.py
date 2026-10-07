@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 from collector.npm.collector import DEFAULT_QUERY, NpmCollector
+from collector.osv.collector import OsvCollector
 
 
 def _positive_int(value: str) -> int:
@@ -44,6 +45,21 @@ def _package_names(explicit: Sequence[str], packages_file: Optional[Path]) -> Op
     return deduplicated
 
 
+def _package_versions(values: Sequence[str], input_file: Optional[Path]) -> List[tuple[str, str]]:
+    entries = list(values)
+    if input_file is not None:
+        entries.extend(line.strip() for line in input_file.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#"))
+    parsed = []
+    for entry in entries:
+        name, separator, version = entry.rpartition("@")
+        if not separator or not name or not version:
+            raise argparse.ArgumentTypeError(f"expected PACKAGE@VERSION, got {entry!r}")
+        parsed.append((name, version))
+    if not parsed:
+        raise argparse.ArgumentTypeError("provide --package-version or --input-file")
+    return list(dict.fromkeys(parsed))
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bigdata", description="Technical-lag data collectors")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -75,28 +91,37 @@ def _build_parser() -> argparse.ArgumentParser:
         help="npm Registry base URL",
     )
     npm.add_argument("--refresh", action="store_true", help="download packages even when a valid success marker exists")
+
+    osv = sources.add_parser("osv", help="collect OSV vulnerabilities for npm package versions")
+    osv.add_argument("--package-version", action="append", default=[], help="npm package and version as PACKAGE@VERSION (repeatable)")
+    osv.add_argument("--input-file", type=Path, help="UTF-8 file with one PACKAGE@VERSION per line")
+    osv.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds")
+    osv.add_argument("--retries", type=_non_negative_int, default=3, help="retries after a failed request")
+    osv.add_argument("--data-dir", type=Path, default=Path(os.environ.get("BIGDATA_DATA_DIR", "data")), help="root for raw, normalized, manifests, and logs")
+    osv.add_argument("--api-url", default=os.environ.get("OSV_API_URL", "https://api.osv.dev"), help="OSV API base URL")
     return parser
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _build_parser().parse_args(argv)
-    if args.command != "collect" or args.source != "npm":
+    if args.command != "collect":
         raise AssertionError("argparse accepted an unsupported command")
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    names = _package_names(args.package, args.packages_file)
-    target = args.limit if names is None else min(args.limit, len(names))
-    collector = NpmCollector(
-        data_dir=args.data_dir,
-        registry_url=args.registry_url,
-        workers=args.workers,
-        timeout=args.timeout,
-        retries=args.retries,
-        refresh=args.refresh,
-    )
-    summary = collector.run(limit=target, query=args.query, package_names=names)
+    if args.source == "npm":
+        names = _package_names(args.package, args.packages_file)
+        target = args.limit if names is None else min(args.limit, len(names))
+        collector = NpmCollector(data_dir=args.data_dir, registry_url=args.registry_url, workers=args.workers, timeout=args.timeout, retries=args.retries, refresh=args.refresh)
+        summary = collector.run(limit=target, query=args.query, package_names=names)
+        success = summary.available >= summary.target
+    elif args.source == "osv":
+        package_versions = _package_versions(args.package_version, args.input_file)
+        summary = OsvCollector(data_dir=args.data_dir, api_url=args.api_url, timeout=args.timeout, retries=args.retries).run(package_versions)
+        success = summary.api_errors == 0
+    else:
+        raise AssertionError("argparse accepted an unsupported source")
     print(json.dumps(summary.to_dict(), ensure_ascii=False, sort_keys=True))
-    return 0 if summary.available >= summary.target else 1
+    return 0 if success else 1
 
 
 if __name__ == "__main__":

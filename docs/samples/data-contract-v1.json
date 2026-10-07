@@ -85,8 +85,10 @@
       "parser_version": "normalizer@1.0.0+git.0123456789abcdef0123456789abcdef01234567"
     },
     "osv_id": "GHSA-example-1234-5678",
+    "aliases": ["CVE-2026-0001"],
     "affected_index": 0,
     "package_name": "example-lib",
+    "ecosystem": "npm",
     "package_purl": "pkg:npm/example-lib",
     "affected": {
       "versions": [],

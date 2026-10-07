@@ -41,3 +41,17 @@ RUN_NPM_INTEGRATION=1 python3 -m unittest tests.test_npm_integration
 ```
 
 Endpoint, формат файлов, правила повторного запуска и ограничения выборки описаны в [документации collector](docs/npm-collector.md). Формат normalized records задан в [Data Contract v1](docs/data-contract-v1.md).
+
+## OSV vulnerability collector
+
+Для запроса известных уязвимостей точных npm-версий:
+
+```bash
+./bigdata collect osv --package-version lodash@4.17.20 --package-version lodash@4.17.21
+```
+
+Сырые ответы OSV сохраняются отдельно; отсутствие найденных уязвимостей записывается как штатный результат. Полный пример, формат результатов и ограничения источника — в [документации OSV](docs/data-sources/osv.md).
+
+```bash
+python3 -m unittest tests.test_osv_collector
+```
