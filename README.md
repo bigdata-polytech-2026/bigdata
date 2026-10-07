@@ -14,4 +14,30 @@
 - `docs/` — определения, data contract и описание источников;
 - `tests/` — проверки.
 
-На этапе bootstrap каталоги являются заготовками. Реализации сборщиков, пайплайна и CI будут добавляться отдельными задачами.
+## npm metadata collector
+
+Нужен Python 3.9 или новее; сторонних библиотек нет. Из корня репозитория:
+
+```bash
+./bigdata collect npm --limit 1000
+```
+
+Команда выбирает пакеты запросом `keywords:javascript` к npm Search API, затем получает полный packument каждого пакета. В stdout выводится JSON summary; прогресс и ошибки идут в stderr. Сырые ответы, normalized JSONL, журнал, manifest запуска и markers для повторного запуска создаются в `data/`. Каталог уже исключен из Git.
+
+Для точечного сбора имена можно передать явно:
+
+```bash
+./bigdata collect npm --limit 3 \
+  --package express \
+  --package lodash \
+  --package request
+```
+
+Unit и live integration test:
+
+```bash
+python3 -m unittest tests.test_npm_collector
+RUN_NPM_INTEGRATION=1 python3 -m unittest tests.test_npm_integration
+```
+
+Endpoint, формат файлов, правила повторного запуска и ограничения выборки описаны в [документации collector](docs/npm-collector.md). Формат normalized records задан в [Data Contract v1](docs/data-contract-v1.md).

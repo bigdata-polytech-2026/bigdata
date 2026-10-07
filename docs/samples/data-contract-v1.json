@@ -10,7 +10,11 @@
       "raw_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "parser_version": "normalizer@1.0.0+git.0123456789abcdef0123456789abcdef01234567"
     },
-    "package_name": "example-app"
+    "package_name": "example-app",
+    "repository": {"type": "git", "url": "git+https://github.com/example/example-app.git"},
+    "dist_tags": {"latest": "1.0.0"},
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "modified_at": "2026-01-01T00:00:00.000Z"
   },
   "PackageVersion": {
     "schema_version": "1.0.0",
@@ -25,7 +29,10 @@
     },
     "package_name": "example-app",
     "version": "1.0.0",
-    "published_at": "2026-01-01T00:00:00.000Z"
+    "published_at": "2026-01-01T00:00:00.000Z",
+    "repository": {"type": "git", "url": "git+https://github.com/example/example-app.git"},
+    "is_deprecated": false,
+    "deprecated_message": null
   },
   "DependencyRequirement": {
     "schema_version": "1.0.0",
