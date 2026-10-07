@@ -37,6 +37,10 @@
 | Поле | Тип | Обязательно | Смысл и источник |
 | --- | --- | --- | --- |
 | `package_name` | string | да | `name` пакета в npm Registry. |
+| `repository` | JSON value или `null` | да | Верхнеуровневое `repository` полного packument без преобразования; исторически npm допускает object и string. Если поля нет, записываем `null`. |
+| `dist_tags` | object | да | Верхнеуровневый `dist-tags` без интерпретации; если объект отсутствует или имеет неверный тип, записываем `{}` и сохраняем исходное значение только в raw. |
+| `created_at` | timestamp или `null` | да | `time.created`, либо `null`, если корректной даты нет. |
+| `modified_at` | timestamp или `null` | да | `time.modified`, либо `null`, если корректной даты нет. |
 
 `schema_version`, `source=npm` и `provenance` добавляются по общему правилу. Пример есть в файле samples под `Package`.
 
@@ -49,8 +53,11 @@
 | `package_name` | string | да | Имя пакета из npm Registry. |
 | `version` | string | да | Ключ в `versions`; не приводим к числу. |
 | `published_at` | timestamp или `null` | да | `time[version]` из полного npm packument. Если его нет, записываем `null`; расчет lag сам исключит такой случай. |
+| `repository` | JSON value или `null` | да | `versions[version].repository` без подстановки верхнеуровневого значения; `null`, если поля нет. |
+| `is_deprecated` | boolean | да | `true`, если `versions[version].deprecated` — непустая строка; иначе `false`. |
+| `deprecated_message` | string или `null` | да | Исходная строка `versions[version].deprecated`, включая пустую, либо `null`, если строкового значения нет. |
 
-`source=npm`. Отсутствие `published_at` не мешает collector сохранить версию, но запрещает выдавать ее за исторически датированную. deps.dev тоже сообщает `publishedAt`, однако в v1 дата для анализа берется из npm Registry; расхождения фиксируем отдельно, не перезаписываем молча.
+`source=npm`. Отсутствие `published_at` не мешает collector сохранить версию, но запрещает выдавать ее за исторически датированную. deps.dev тоже сообщает `publishedAt`, однако в v1 дата для анализа берется из npm Registry; расхождения фиксируем отдельно, не перезаписываем молча. Прочие поля packument и version document, включая авторов, license, engines, dist и произвольные поля publisher, полностью остаются в raw; normalized v1 не копирует их выборочно без изменения контракта.
 
 ## DependencyRequirement
 
