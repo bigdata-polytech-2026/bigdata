@@ -1,0 +1,5 @@
+[core]
+    remote = yandex-s3
+['remote "yandex-s3"']
+    url = s3://technical-lag-data-2026/dvc
+    endpointurl = https://storage.yandexcloud.net

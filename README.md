@@ -2,7 +2,7 @@
 
 Исследовательский monorepo проекта «Анализ технического отставания программных зависимостей в экосистеме npm и факторов несвоевременного обновления».
 
-Источники данных: npm Registry, deps.dev и OSV. Рабочий процесс: отдельная ветка на задачу, Pull Request, review и CI. Объемные данные и секреты в Git не хранятся.
+Источники данных: npm Registry, deps.dev и OSV. Рабочий процесс: отдельная ветка на задачу, Pull Request, review и CI. Объемные данные хранятся в Yandex Object Storage и версионируются через DVC; секреты в Git не хранятся.
 
 ## Структура
 
@@ -13,6 +13,20 @@
 - `infra/` — воспроизводимый запуск;
 - `docs/` — определения, data contract и описание источников;
 - `tests/` — проверки.
+
+## Данные и DVC
+
+После clone или переключения на другой commit нужная версия данных восстанавливается так:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dvc.txt
+dvc remote modify --local yandex-s3 profile technical-lag
+dvc pull
+```
+
+Remote `s3://technical-lag-data-2026/dvc` и endpoint Yandex уже находятся в общей конфигурации. Имя AWS-профиля и credentials остаются только локально. Правила публикации новых immutable snapshots, структура `data/` и команды для второго участника описаны в [документации по версионированию данных](docs/data-versioning.md).
 
 ## npm metadata collector
 
