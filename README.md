@@ -79,3 +79,17 @@ Raw-ответы, normalized `DependencyRelation`, manifest, event log и marker
 python3 -m unittest tests.test_depsdev_collector
 RUN_DEPSDEV_INTEGRATION=1 python3 -m unittest tests.test_depsdev_integration
 ```
+
+## OSV vulnerability collector
+
+Для запроса известных уязвимостей точных npm-версий:
+
+```bash
+./bigdata collect osv --package-version lodash@4.17.20 --package-version lodash@4.17.21
+```
+
+Сырые ответы OSV сохраняются отдельно; отсутствие найденных уязвимостей записывается как штатный результат. Полный пример, формат результатов и ограничения источника — в [документации OSV](docs/data-sources/osv.md).
+
+```bash
+python3 -m unittest tests.test_osv_collector
+```

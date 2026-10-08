@@ -21,6 +21,7 @@ data/**
 !data/README.md
 
 # Generated outputs outside data/
+/data-test/
 /raw/
 /normalized/
 /results/
