@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "2.0.0"
 COLLECTOR_VERSION = "1.0.0"
 OSV_QUERY_PATH = "/v1/query"
 TIMESTAMP_RE = re.compile(
@@ -254,10 +254,23 @@ class OsvCollector:
             advisory_records, advisory_warnings = normalize_advisory(_object(advisory, "OSV vuln"), provenance)
             records.extend(advisory_records); warnings.extend(advisory_warnings)
             if isinstance(advisory.get("id"), str): ids.add(advisory["id"])
-        normalized_path = self.data_dir / "normalized" / "v1" / "vulnerability" / retrieved_at[:10] / f"{snapshot_id}.jsonl"
+        normalized_path = self.data_dir / "normalized" / "v2" / "vulnerability" / retrieved_at[:10] / f"{snapshot_id}.jsonl"
         _atomic_write(normalized_path, b"".join(_json_bytes(record) for record in records))
         status = "vulnerabilities_found" if advisories else "no_vulnerabilities"
-        result = {"package_name": package_name, "version": version, "status": status, "snapshot_id": snapshot_id, "raw_path": provenance["raw_path"], "normalized_path": self._relative(normalized_path), "osv_records": len(ids), "vulnerability_records": len(records)}
+        result = {
+            "package_name": package_name,
+            "version": version,
+            "status": status,
+            "snapshot_id": snapshot_id,
+            "request_url": url,
+            "retrieved_at": retrieved_at,
+            "http_status": response.status,
+            "raw_path": provenance["raw_path"],
+            "raw_sha256": provenance["raw_sha256"],
+            "normalized_path": self._relative(normalized_path),
+            "osv_records": len(ids),
+            "vulnerability_records": len(records),
+        }
         assert self._event_log is not None; self._event_log.write("query_completed", run_id=run_id, **result, warnings=warnings)
         return result, ids
 

@@ -103,7 +103,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     if args.command != "collect":
         raise AssertionError("argparse accepted an unsupported command")
 
@@ -115,7 +116,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         summary = collector.run(limit=target, query=args.query, package_names=names)
         success = summary.available >= summary.target
     elif args.source == "osv":
-        package_versions = _package_versions(args.package_version, args.input_file)
+        try:
+            package_versions = _package_versions(args.package_version, args.input_file)
+        except (argparse.ArgumentTypeError, OSError) as exc:
+            parser.error(str(exc))
         summary = OsvCollector(data_dir=args.data_dir, api_url=args.api_url, timeout=args.timeout, retries=args.retries).run(package_versions)
         success = summary.api_errors == 0
     else:

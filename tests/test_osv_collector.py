@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
 
 from collector.osv.collector import HttpResponse, OsvCollector
+from collector.__main__ import main
 
 
 VULNERABLE = {
@@ -36,8 +39,12 @@ class OsvCollectorTest(unittest.TestCase):
             manifests = list((data_dir / "manifests" / "osv").glob("*.json")); manifest = json.loads(manifests[0].read_text())
             self.assertEqual([item["status"] for item in manifest["results"]], ["vulnerabilities_found", "no_vulnerabilities"])
             raw_files = list((data_dir / "raw" / "osv").rglob("*.json")); self.assertEqual(len(raw_files), 2)
-            records = [json.loads(line) for path in (data_dir / "normalized" / "v1" / "vulnerability").rglob("*.jsonl") for line in path.read_text().splitlines()]
+            self.assertEqual(manifest["results"][1]["http_status"], 200)
+            self.assertTrue(manifest["results"][1]["raw_sha256"])
+            self.assertTrue(manifest["results"][1]["retrieved_at"])
+            records = [json.loads(line) for path in (data_dir / "normalized" / "v2" / "vulnerability").rglob("*.jsonl") for line in path.read_text().splitlines()]
             self.assertEqual(len(records), 1); record = records[0]
+            self.assertEqual(record["schema_version"], "2.0.0")
             self.assertEqual(record["osv_id"], "GHSA-test-1234-5678")
             self.assertEqual(record["ecosystem"], "npm")
             self.assertEqual(record["aliases"], ["CVE-2021-0001"])
@@ -50,6 +57,13 @@ class OsvCollectorTest(unittest.TestCase):
             client = FakeClient({("broken", "1.0.0"): RuntimeError("offline")})
             summary = OsvCollector(Path(temporary) / "data", client=client).run([("broken", "1.0.0")])
             self.assertEqual((summary.checked, summary.api_errors), (0, 1))
+
+    def test_invalid_cli_input_uses_argparse_error(self):
+        stderr = io.StringIO()
+        with self.assertRaises(SystemExit) as raised, contextlib.redirect_stderr(stderr):
+            main(["collect", "osv", "--package-version", "not-a-package-version"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("expected PACKAGE@VERSION", stderr.getvalue())
 
 
 if __name__ == "__main__": unittest.main()

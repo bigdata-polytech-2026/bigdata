@@ -102,10 +102,8 @@
 | Поле | Тип | Обязательно | Смысл и источник |
 | --- | --- | --- | --- |
 | `osv_id` | string | да | `id` из OSV, без замены на CVE alias. |
-| `aliases` | string[] | да | `aliases` advisory, например CVE; `[]`, если OSV их не указал. |
 | `affected_index` | integer ≥ 0 | да | Индекс исходного блока в `affected[]`, с нуля. |
 | `package_name` | string | да | `affected[].package.name`; целевой пакет. |
-| `ecosystem` | string, `npm` | да | `affected[].package.ecosystem`; в v1 collector принимает только npm. |
 | `package_purl` | string или `null` | да | `affected[].package.purl`, либо `null`, если OSV его не указал. |
 | `affected` | object | да | Данные ровно одного блока: `{versions, ranges, ecosystem_specific, database_specific}`. Отсутствующие `versions`/`ranges` становятся `[]`, отсутствующие qualifier-объекты — `null`; содержимое объектов сохраняется без интерпретации. Достаточно непустого `versions` или `ranges`. |
 | `fixed_versions` | string[] | да | Значения `{fixed: value}` только из ranges типов `SEMVER` и `ECOSYSTEM` этого блока, в исходном порядке, без точных повторов. Значения из `GIT` и других типов сюда не попадают; они остаются типизированными событиями в `affected.ranges`. `[]` значит «нет подходящего fixed event», а не «исправления нет». Рассчитывается при нормализации. |

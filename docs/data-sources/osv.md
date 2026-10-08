@@ -14,7 +14,7 @@
 ./bigdata collect osv --input-file docs/samples/osv-package-versions.txt
 ```
 
-Каждый ответ, включая `{}` для версии без найденных уязвимостей, сохраняется в `data/raw/osv/<date>/<snapshot>.json`. Нормализованные строки `Vulnerability` сохраняются в `data/normalized/v1/vulnerability/<date>/<snapshot>.jsonl`; их формат задан в [Data Contract v1](../data-contract-v1.md). В manifest результата статус `no_vulnerabilities` — нормальный исход, не ошибка. Ошибки API имеют статус `api_error` и дублируются в JSONL-журнале `data/logs/osv/`.
+Каждый ответ, включая `{}` для версии без найденных уязвимостей, сохраняется в `data/raw/osv/<date>/<snapshot>.json`. Нормализованные строки `Vulnerability` схемы 2.0.0 сохраняются в `data/normalized/v2/vulnerability/<date>/<snapshot>.jsonl`; их формат задан в [OSV contract v2](../data-contract-v2.md). В manifest результата статус `no_vulnerabilities` — нормальный исход, не ошибка: в нём сохраняются `request_url`, `retrieved_at`, `http_status`, `raw_path` и `raw_sha256`, чтобы raw-ответ можно было проверить. Ошибки API имеют статус `api_error` и дублируются в JSONL-журнале `data/logs/osv/`.
 
 Итоговый JSON содержит метрики тестового запуска: `checked`, `versions_with_vulnerabilities`, `unique_osv_records`, `api_errors` и `elapsed_seconds`.
 
