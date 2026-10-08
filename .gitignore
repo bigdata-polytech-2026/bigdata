@@ -12,6 +12,13 @@ node_modules/
 dist/
 build/
 
+# Data and generated outputs
+data/
+data-test/
+raw/
+normalized/
+results/
+artifacts/
 # Data payloads live in DVC; Git keeps only metadata and the documented layout.
 data/**
 !data/**/
