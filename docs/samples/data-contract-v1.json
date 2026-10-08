@@ -56,7 +56,7 @@
     "source": "depsdev",
     "provenance": {
       "snapshot_id": "22222222-2222-4222-8222-222222222222",
-      "request_url": "https://api.deps.dev/v3alpha/systems/npm/packages/example-app/versions/1.0.0:dependencies",
+      "request_url": "https://api.deps.dev/v3/systems/npm/packages/example-app/versions/1.0.0:dependencies",
       "retrieved_at": "2026-10-07T10:05:00.000Z",
       "raw_path": "data/raw/depsdev/2026-10-07/22222222-2222-4222-8222-222222222222.json",
       "raw_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

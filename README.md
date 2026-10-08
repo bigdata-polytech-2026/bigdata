@@ -55,3 +55,27 @@ RUN_NPM_INTEGRATION=1 python3 -m unittest tests.test_npm_integration
 ```
 
 Endpoint, формат файлов, правила повторного запуска и ограничения выборки описаны в [документации collector](docs/npm-collector.md). Формат normalized records задан в [Data Contract v1](docs/data-contract-v1.md).
+
+## deps.dev dependency collector
+
+Collector получает resolved dependency graph для точных npm package versions:
+
+```bash
+./bigdata collect depsdev \
+  --input-file docs/samples/depsdev-package-versions.txt
+```
+
+Можно передать версии прямо в команде:
+
+```bash
+./bigdata collect depsdev \
+  --package-version react@18.2.0 \
+  --package-version @colors/colors@1.5.0
+```
+
+Raw-ответы, normalized `DependencyRelation`, manifest, event log и markers повторного запуска сохраняются в `data/`. Формат API, используемые поля, ограничения и результаты MVP-сбора описаны в [документации deps.dev](docs/data-sources/depsdev.md).
+
+```bash
+python3 -m unittest tests.test_depsdev_collector
+RUN_DEPSDEV_INTEGRATION=1 python3 -m unittest tests.test_depsdev_integration
+```
