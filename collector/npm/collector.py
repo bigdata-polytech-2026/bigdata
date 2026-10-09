@@ -551,12 +551,18 @@ class NpmCollector:
             return None
         if (
             not isinstance(state, dict)
-            or state.get("package_name") is None
+            or state.get("requested_name") != package_name
+            or not isinstance(state.get("package_name"), str)
             or state.get("parser_version") != self.parser_version
         ):
             return None
         paths = [state.get("raw_path"), *(state.get("normalized_paths") or [])]
         if not paths or any(not isinstance(path, str) or not (self.data_dir / path).is_file() for path in paths):
+            return None
+        try:
+            if hashlib.sha256((self.data_dir / paths[0]).read_bytes()).hexdigest() != state.get("raw_sha256"):
+                return None
+        except OSError:
             return None
         return state
 

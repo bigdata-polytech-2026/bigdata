@@ -52,6 +52,18 @@ dvc pull
 
 Добавляем в DVC готовые version/date partitions, а не общие изменяемые каталоги и не миллионы отдельных файлов:
 
+Для согласованного pilot команда `collect pilot` уже формирует compacted snapshot, поэтому публикуется только он; рабочий `data/landing/pilot-v1` в DVC не добавляется:
+
+```bash
+dvc add data/datasets/pilot-v1
+dvc push
+git add data/datasets/pilot-v1.dvc data/datasets/.gitignore
+git commit -m "data: publish pilot dataset v1"
+git push
+```
+
+Для отдельных source partitions или будущего full dataset применяется тот же принцип:
+
 ```bash
 dvc add data/raw/npm/2026-10-09
 dvc add data/normalized/v1/package/2026-10-09

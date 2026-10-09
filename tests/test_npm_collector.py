@@ -106,6 +106,11 @@ class NpmCollectorTest(unittest.TestCase):
             self.assertEqual(resumed.available, 1)
             self.assertEqual(no_network.calls, [])
 
+            raw_files[0].write_bytes(b"{}\n")
+            repaired = NpmCollector(data_dir=data_dir, registry_url=base, workers=1, client=client).run(limit=1, package_names=["example"])
+            self.assertEqual((repaired.downloaded, repaired.skipped, repaired.available), (1, 0, 1))
+            self.assertEqual(len(list((data_dir / "raw" / "npm").rglob("*.json"))), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
