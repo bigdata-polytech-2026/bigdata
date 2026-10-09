@@ -11,12 +11,14 @@
 Для списка подходит текстовый файл, по одной паре `PACKAGE@VERSION` на строку; scoped-пакеты поддерживаются, например `@babel/core@7.20.0`:
 
 ```bash
-./bigdata collect osv --input-file docs/samples/osv-package-versions.txt
+./bigdata collect osv --input-file docs/samples/osv-package-versions.txt --workers 8
 ```
 
-Каждый ответ, включая `{}` для версии без найденных уязвимостей, сохраняется в `data/raw/osv/<date>/<snapshot>.json`. Нормализованные строки `Vulnerability` схемы 2.0.0 сохраняются в `data/normalized/v2/vulnerability/<date>/<snapshot>.jsonl`; их формат задан в [OSV contract v2](../data-contract-v2.md). В manifest результата статус `no_vulnerabilities` — нормальный исход, не ошибка: в нём сохраняются `request_url`, `retrieved_at`, `http_status`, `raw_path` и `raw_sha256`, чтобы raw-ответ можно было проверить. Ошибки API имеют статус `api_error` и дублируются в JSONL-журнале `data/logs/osv/`.
+Каждый ответ, включая `{}` для версии без найденных уязвимостей, сохраняется в `data/raw/osv/<date>/<snapshot>.json`. Если OSV возвращает `next_page_token`, collector следует [официальному протоколу pagination](https://google.github.io/osv.dev/post-v1-query/): передает token как `page_token` до исчерпания страниц и сохраняет каждую страницу отдельно. Нормализованные строки `Vulnerability` схемы 2.0.0 сохраняются в `data/normalized/v2/vulnerability/<date>/<snapshot>.jsonl`; их формат задан в [OSV contract v2](../data-contract-v2.md).
 
-Итоговый JSON содержит метрики тестового запуска: `checked`, `versions_with_vulnerabilities`, `unique_osv_records`, `api_errors` и `elapsed_seconds`.
+Успешный положительный или отрицательный результат получает marker в `data/state/osv/`. Повторный запуск проверяет package/version, parser version, наличие normalized-файла и SHA-256 всех raw-страниц, после чего использует результат без сетевого запроса. `--refresh` отключает reuse. В manifest статус `no_vulnerabilities` — нормальный исход, а `api_error` означает изолированную ошибку одного запроса.
+
+Итоговый JSON содержит метрики запуска: `checked`, `downloaded`, `skipped`, `versions_with_vulnerabilities`, `unique_osv_records`, `vulnerability_records`, `api_errors` и `elapsed_seconds`.
 
 ## Ограничения
 

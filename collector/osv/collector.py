@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import dataclasses
 import datetime as dt
 import hashlib
@@ -51,8 +52,11 @@ class RunSummary:
     run_id: str
     target: int
     checked: int = 0
+    downloaded: int = 0
+    skipped: int = 0
     versions_with_vulnerabilities: int = 0
     unique_osv_records: int = 0
+    vulnerability_records: int = 0
     api_errors: int = 0
     elapsed_seconds: float = 0.0
     manifest_path: str = ""
@@ -213,66 +217,194 @@ def normalize_advisory(advisory: Mapping[str, Any], provenance: Mapping[str, Any
 
 
 class OsvCollector:
-    def __init__(self, data_dir: Path, api_url: str = "https://api.osv.dev", timeout: float = 30.0, retries: int = 3, client: Optional[HttpClient] = None):
-        self.data_dir, self.api_url, self.client = Path(data_dir), api_url.rstrip("/"), client or HttpClient(timeout, retries)
+    def __init__(
+        self,
+        data_dir: Path,
+        api_url: str = "https://api.osv.dev",
+        workers: int = 8,
+        timeout: float = 30.0,
+        retries: int = 3,
+        refresh: bool = False,
+        client: Optional[HttpClient] = None,
+    ):
+        self.data_dir = Path(data_dir)
+        self.api_url = api_url.rstrip("/")
+        self.workers = workers
+        self.refresh = refresh
+        self.client = client or HttpClient(timeout, retries)
         self.parser_version = parser_version()
         self._event_log: Optional[JsonEventLog] = None
 
     def run(self, package_versions: Sequence[Tuple[str, str]]) -> RunSummary:
-        if not package_versions:
+        requested = list(dict.fromkeys(package_versions))
+        if not requested:
             raise ValueError("at least one package/version is required")
+        if any(not package_name or not version for package_name, version in requested):
+            raise ValueError("package names and versions must be non-empty")
         run_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
         log_path, manifest_path = self.data_dir / "logs" / "osv" / f"{run_id}.jsonl", self.data_dir / "manifests" / "osv" / f"{run_id}.json"
         self._event_log = JsonEventLog(log_path)
-        summary = RunSummary(run_id=run_id, target=len(package_versions), manifest_path=self._relative(manifest_path), log_path=self._relative(log_path))
-        started = time.monotonic(); started_at = utc_now(); results = []; unique_ids = set()
-        self._event_log.write("run_started", run_id=run_id, target=summary.target, parser_version=self.parser_version)
-        for package_name, version in package_versions:
-            try:
-                result, ids = self._collect_one(package_name, version, run_id)
-                summary.checked += 1
-                if result["status"] == "vulnerabilities_found": summary.versions_with_vulnerabilities += 1
-                unique_ids.update(ids); results.append(result)
-            except Exception as exc:
-                summary.api_errors += 1
-                result = {"package_name": package_name, "version": version, "status": "api_error", "error_type": type(exc).__name__, "error": str(exc), "http_status": getattr(exc, "status", None)}
-                results.append(result); self._event_log.write("query_failed", run_id=run_id, **result); LOGGER.error("OSV query failed for %s@%s: %s", package_name, version, exc)
-        summary.unique_osv_records = len(unique_ids); summary.elapsed_seconds = round(time.monotonic() - started, 3)
-        manifest = {"run_id": run_id, "started_at": started_at, "finished_at": utc_now(), "source": "osv", "api_url": self.api_url, "parser_version": self.parser_version, "summary": summary.to_dict(), "results": results}
+        summary = RunSummary(run_id=run_id, target=len(requested), manifest_path=self._relative(manifest_path), log_path=self._relative(log_path))
+        started, started_at = time.monotonic(), utc_now()
+        results_by_index: Dict[int, Dict[str, Any]] = {}
+        unique_ids = set()
+        pending = []
+        self._event_log.write("run_started", run_id=run_id, target=summary.target, workers=self.workers, parser_version=self.parser_version)
+
+        for index, (package_name, version) in enumerate(requested):
+            state = None if self.refresh else self._complete_state(package_name, version)
+            if state is None:
+                pending.append((index, package_name, version))
+                continue
+            result = {**state, "package_name": package_name, "version": version, "result_status": state["status"], "status": "skipped"}
+            results_by_index[index] = result
+            self._apply_success(summary, result, unique_ids, skipped=True)
+            self._event_log.write("query_skipped", run_id=run_id, **result)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as executor:
+            futures = {
+                executor.submit(self._collect_one, package_name, version, run_id): (index, package_name, version)
+                for index, package_name, version in pending
+            }
+            for future in concurrent.futures.as_completed(futures):
+                index, package_name, version = futures[future]
+                try:
+                    result, ids = future.result()
+                except Exception as exc:  # query isolation is intentional
+                    summary.api_errors += 1
+                    result = {"package_name": package_name, "version": version, "status": "api_error", "error_type": type(exc).__name__, "error": str(exc), "http_status": getattr(exc, "status", None)}
+                    self._event_log.write("query_failed", run_id=run_id, **result)
+                    LOGGER.error("OSV query failed for %s@%s: %s", package_name, version, exc)
+                else:
+                    result["osv_ids"] = sorted(ids)
+                    self._apply_success(summary, result, unique_ids, skipped=False)
+                results_by_index[index] = result
+                processed = summary.checked + summary.api_errors
+                if processed % 25 == 0 or processed == summary.target:
+                    LOGGER.info("OSV progress: processed=%d/%d checked=%d failed=%d", processed, summary.target, summary.checked, summary.api_errors)
+
+        summary.unique_osv_records = len(unique_ids)
+        summary.elapsed_seconds = round(time.monotonic() - started, 3)
+        manifest = {"run_id": run_id, "started_at": started_at, "finished_at": utc_now(), "source": "osv", "api_url": self.api_url, "parser_version": self.parser_version, "summary": summary.to_dict(), "results": [results_by_index[index] for index in range(len(requested))]}
         _atomic_write(manifest_path, _json_bytes(manifest, pretty=True)); self._event_log.write("run_finished", **summary.to_dict())
         return summary
 
+    def _apply_success(self, summary: RunSummary, result: Mapping[str, Any], unique_ids: set, skipped: bool) -> None:
+        summary.checked += 1
+        if skipped:
+            summary.skipped += 1
+        else:
+            summary.downloaded += 1
+        result_status = result.get("result_status", result.get("status"))
+        if result_status == "vulnerabilities_found":
+            summary.versions_with_vulnerabilities += 1
+        summary.vulnerability_records += int(result.get("vulnerability_records", 0))
+        ids = result.get("osv_ids")
+        if isinstance(ids, list):
+            unique_ids.update(value for value in ids if isinstance(value, str))
+
     def _collect_one(self, package_name: str, version: str, run_id: str) -> Tuple[Dict[str, Any], set]:
-        if not package_name or not version: raise ValueError("package name and version must be non-empty")
-        url = self.api_url + OSV_QUERY_PATH; response = self.client.post_json(url, {"package": {"name": package_name, "ecosystem": "npm"}, "version": version})
-        retrieved_at, snapshot_id = utc_now(), str(uuid.uuid4()); raw_path = self.data_dir / "raw" / "osv" / retrieved_at[:10] / f"{snapshot_id}.json"; _atomic_write(raw_path, response.body)
-        document = _object(json.loads(response.body.decode("utf-8")), url); advisories = document.get("vulns", [])
-        if not isinstance(advisories, list): raise CollectionError("OSV query response has non-list vulns")
-        provenance = {"snapshot_id": snapshot_id, "request_url": url, "retrieved_at": retrieved_at, "raw_path": self._relative(raw_path), "raw_sha256": hashlib.sha256(response.body).hexdigest(), "parser_version": self.parser_version}
-        records, warnings, ids = [], [], set()
-        for advisory in advisories:
-            advisory_records, advisory_warnings = normalize_advisory(_object(advisory, "OSV vuln"), provenance)
-            records.extend(advisory_records); warnings.extend(advisory_warnings)
-            if isinstance(advisory.get("id"), str): ids.add(advisory["id"])
-        normalized_path = self.data_dir / "normalized" / "v2" / "vulnerability" / retrieved_at[:10] / f"{snapshot_id}.jsonl"
+        url = self.api_url + OSV_QUERY_PATH
+        base_query = {"package": {"name": package_name, "ecosystem": "npm"}, "version": version}
+        records, warnings, ids, raw_pages = [], [], set(), []
+        next_page_token = None
+        seen_page_tokens = set()
+        first_snapshot_id = None
+        first_retrieved_at = None
+        response_status = None
+
+        while True:
+            query = dict(base_query)
+            if next_page_token is not None:
+                query["page_token"] = next_page_token
+            response = self.client.post_json(url, query)
+            response_status = response.status
+            retrieved_at, snapshot_id = utc_now(), str(uuid.uuid4())
+            first_snapshot_id = first_snapshot_id or snapshot_id
+            first_retrieved_at = first_retrieved_at or retrieved_at
+            raw_path = self.data_dir / "raw" / "osv" / retrieved_at[:10] / f"{snapshot_id}.json"
+            _atomic_write(raw_path, response.body)
+            raw_sha256 = hashlib.sha256(response.body).hexdigest()
+            raw_pages.append({"snapshot_id": snapshot_id, "retrieved_at": retrieved_at, "raw_path": self._relative(raw_path), "raw_sha256": raw_sha256, "http_status": response.status})
+            document = _object(json.loads(response.body.decode("utf-8")), url)
+            advisories = document.get("vulns", [])
+            if not isinstance(advisories, list):
+                raise CollectionError("OSV query response has non-list vulns")
+            provenance = {"snapshot_id": snapshot_id, "request_url": url, "retrieved_at": retrieved_at, "raw_path": self._relative(raw_path), "raw_sha256": raw_sha256, "parser_version": self.parser_version}
+            for advisory in advisories:
+                advisory_records, advisory_warnings = normalize_advisory(_object(advisory, "OSV vuln"), provenance)
+                records.extend(advisory_records)
+                warnings.extend(advisory_warnings)
+                if isinstance(advisory.get("id"), str):
+                    ids.add(advisory["id"])
+            token = document.get("next_page_token")
+            if not isinstance(token, str) or not token:
+                break
+            if token in seen_page_tokens:
+                raise CollectionError("OSV query repeated next_page_token")
+            seen_page_tokens.add(token)
+            next_page_token = token
+
+        assert first_snapshot_id is not None and first_retrieved_at is not None and response_status is not None
+        normalized_path = self.data_dir / "normalized" / "v2" / "vulnerability" / first_retrieved_at[:10] / f"{first_snapshot_id}.jsonl"
         _atomic_write(normalized_path, b"".join(_json_bytes(record) for record in records))
-        status = "vulnerabilities_found" if advisories else "no_vulnerabilities"
+        status = "vulnerabilities_found" if ids else "no_vulnerabilities"
         result = {
             "package_name": package_name,
             "version": version,
             "status": status,
-            "snapshot_id": snapshot_id,
+            "snapshot_id": first_snapshot_id,
             "request_url": url,
-            "retrieved_at": retrieved_at,
-            "http_status": response.status,
-            "raw_path": provenance["raw_path"],
-            "raw_sha256": provenance["raw_sha256"],
+            "retrieved_at": first_retrieved_at,
+            "http_status": response_status,
+            "raw_path": raw_pages[0]["raw_path"],
+            "raw_sha256": raw_pages[0]["raw_sha256"],
+            "raw_pages": raw_pages,
+            "pages": len(raw_pages),
+            "raw_bytes": sum((self.data_dir / page["raw_path"]).stat().st_size for page in raw_pages),
             "normalized_path": self._relative(normalized_path),
             "osv_records": len(ids),
             "vulnerability_records": len(records),
+            "osv_ids": sorted(ids),
         }
-        assert self._event_log is not None; self._event_log.write("query_completed", run_id=run_id, **result, warnings=warnings)
+        state = {**result, "parser_version": self.parser_version}
+        _atomic_write(self._state_path(package_name, version), _json_bytes(state, pretty=True))
+        assert self._event_log is not None
+        self._event_log.write("query_completed", run_id=run_id, **result, warnings=warnings)
         return result, ids
+
+    def _state_path(self, package_name: str, version: str) -> Path:
+        return self.data_dir / "state" / "osv" / f"{_state_key(package_name, version)}.json"
+
+    def _complete_state(self, package_name: str, version: str) -> Optional[Dict[str, Any]]:
+        try:
+            state = json.loads(self._state_path(package_name, version).read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if (
+            not isinstance(state, dict)
+            or state.get("package_name") != package_name
+            or state.get("version") != version
+            or state.get("status") not in {"vulnerabilities_found", "no_vulnerabilities"}
+            or state.get("parser_version") != self.parser_version
+        ):
+            return None
+        normalized_path = state.get("normalized_path")
+        if not isinstance(normalized_path, str) or not (self.data_dir / normalized_path).is_file():
+            return None
+        pages = state.get("raw_pages")
+        if not isinstance(pages, list) or not pages:
+            pages = [{"raw_path": state.get("raw_path"), "raw_sha256": state.get("raw_sha256")}]
+        for page in pages:
+            if not isinstance(page, dict) or not isinstance(page.get("raw_path"), str):
+                return None
+            raw_path = self.data_dir / page["raw_path"]
+            try:
+                if hashlib.sha256(raw_path.read_bytes()).hexdigest() != page.get("raw_sha256"):
+                    return None
+            except OSError:
+                return None
+        return state
 
     def _relative(self, path: Path) -> str:
         return path.relative_to(self.data_dir).as_posix()

@@ -29,6 +29,22 @@ class FakeClient:
         return HttpResponse(url, 200, json.dumps(result).encode(), {})
 
 
+class PagingClient:
+    def __init__(self): self.calls = []
+    def post_json(self, url, value):
+        self.calls.append(value)
+        if "page_token" not in value:
+            result = {**VULNERABLE, "next_page_token": "page-2"}
+        else:
+            result = {}
+        return HttpResponse(url, 200, json.dumps(result).encode(), {})
+
+
+class NoNetworkClient:
+    def post_json(self, url, value):
+        raise AssertionError(f"unexpected request: {url} {value}")
+
+
 class OsvCollectorTest(unittest.TestCase):
     def test_vulnerable_and_not_vulnerable_versions_are_distinct(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -57,6 +73,23 @@ class OsvCollectorTest(unittest.TestCase):
             client = FakeClient({("broken", "1.0.0"): RuntimeError("offline")})
             summary = OsvCollector(Path(temporary) / "data", client=client).run([("broken", "1.0.0")])
             self.assertEqual((summary.checked, summary.api_errors), (0, 1))
+
+    def test_pagination_and_success_marker_resume(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary) / "data"
+            client = PagingClient()
+            summary = OsvCollector(data_dir, workers=1, client=client).run([("vulnerable-package", "1.0.0")])
+
+            self.assertEqual((summary.checked, summary.downloaded, summary.api_errors), (1, 1, 0))
+            self.assertEqual(len(client.calls), 2)
+            self.assertNotIn("page_token", client.calls[0])
+            self.assertEqual(client.calls[1]["page_token"], "page-2")
+            manifest = json.loads(next((data_dir / "manifests" / "osv").glob("*.json")).read_text())
+            self.assertEqual(manifest["results"][0]["pages"], 2)
+            self.assertEqual(len(list((data_dir / "raw" / "osv").rglob("*.json"))), 2)
+
+            resumed = OsvCollector(data_dir, workers=1, client=NoNetworkClient()).run([("vulnerable-package", "1.0.0")])
+            self.assertEqual((resumed.checked, resumed.downloaded, resumed.skipped, resumed.api_errors), (1, 0, 1, 0))
 
     def test_invalid_cli_input_uses_argparse_error(self):
         stderr = io.StringIO()

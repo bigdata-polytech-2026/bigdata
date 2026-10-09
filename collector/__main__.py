@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import List, Optional, Sequence
 
@@ -11,6 +12,7 @@ from collector.depsdev.collector import DEFAULT_API_URL as DEPSDEV_API_URL
 from collector.depsdev.collector import DepsDevCollector
 from collector.npm.collector import DEFAULT_QUERY, NpmCollector
 from collector.osv.collector import OsvCollector
+from collector.pilot.collector import PilotCollector
 
 
 def _positive_int(value: str) -> int:
@@ -25,6 +27,19 @@ def _non_negative_int(value: str) -> int:
     if parsed < 0:
         raise argparse.ArgumentTypeError("value must be at least 0")
     return parsed
+
+
+def _rate(value: str) -> float:
+    parsed = float(value)
+    if not 0.0 <= parsed <= 1.0:
+        raise argparse.ArgumentTypeError("value must be between 0 and 1")
+    return parsed
+
+
+def _dataset_id(value: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) is None or value in {".", ".."}:
+        raise argparse.ArgumentTypeError("dataset id may contain only letters, numbers, dot, underscore, and hyphen")
+    return value
 
 
 def _package_names(explicit: Sequence[str], packages_file: Optional[Path]) -> Optional[List[str]]:
@@ -109,10 +124,30 @@ def _build_parser() -> argparse.ArgumentParser:
     osv = sources.add_parser("osv", help="collect OSV vulnerabilities for npm package versions")
     osv.add_argument("--package-version", action="append", default=[], help="npm package and version as PACKAGE@VERSION (repeatable)")
     osv.add_argument("--input-file", type=Path, help="UTF-8 file with one PACKAGE@VERSION per line")
+    osv.add_argument("--workers", type=_positive_int, default=8, help="concurrent OSV requests")
     osv.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds")
     osv.add_argument("--retries", type=_non_negative_int, default=3, help="retries after a failed request")
     osv.add_argument("--data-dir", type=Path, default=Path(os.environ.get("BIGDATA_DATA_DIR", "data")), help="root for raw, normalized, manifests, and logs")
     osv.add_argument("--api-url", default=os.environ.get("OSV_API_URL", "https://api.osv.dev"), help="OSV API base URL")
+    osv.add_argument("--refresh", action="store_true", help="query versions even when a valid success marker exists")
+
+    pilot = sources.add_parser("pilot", help="collect a resumable joined npm/deps.dev/OSV pilot dataset")
+    pilot.add_argument("--dataset-id", type=_dataset_id, default="pilot-v1", help="immutable dataset identifier")
+    pilot.add_argument("--package-limit", type=_positive_int, default=3000, help="successful npm packages required")
+    pilot.add_argument("--versions-per-package", type=_non_negative_int, default=5, help="evenly sampled historical versions per package; 0 means all")
+    pilot.add_argument("--chunk-size", type=_positive_int, default=500, help="package versions per enrichment sub-run")
+    pilot.add_argument("--workers", type=_positive_int, default=8, help="concurrent npm and deps.dev requests")
+    pilot.add_argument("--osv-workers", type=_positive_int, default=8, help="concurrent OSV requests")
+    pilot.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds")
+    pilot.add_argument("--retries", type=_non_negative_int, default=3, help="retries after temporary API errors")
+    pilot.add_argument("--shard-size-mb", type=_positive_int, default=128, help="approximate compressed shard target")
+    pilot.add_argument("--min-depsdev-success-rate", type=_rate, default=0.90, help="minimum successful deps.dev fraction")
+    pilot.add_argument("--min-osv-success-rate", type=_rate, default=0.99, help="minimum successful OSV fraction")
+    pilot.add_argument("--query", default=os.environ.get("NPM_SEARCH_QUERY", DEFAULT_QUERY), help="npm search query")
+    pilot.add_argument("--data-root", type=Path, default=Path(os.environ.get("BIGDATA_DATA_DIR", "data")), help="root containing landing/ and datasets/")
+    pilot.add_argument("--registry-url", default=os.environ.get("NPM_REGISTRY_URL", "https://registry.npmjs.org"), help="npm Registry base URL")
+    pilot.add_argument("--depsdev-api-url", default=os.environ.get("DEPSDEV_API_URL", DEPSDEV_API_URL), help="deps.dev API base URL")
+    pilot.add_argument("--osv-api-url", default=os.environ.get("OSV_API_URL", "https://api.osv.dev"), help="OSV API base URL")
     return parser
 
 
@@ -157,8 +192,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             package_versions = _package_versions(args.package_version, args.input_file)
         except (argparse.ArgumentTypeError, OSError) as exc:
             parser.error(str(exc))
-        summary = OsvCollector(data_dir=args.data_dir, api_url=args.api_url, timeout=args.timeout, retries=args.retries).run(package_versions)
+        summary = OsvCollector(data_dir=args.data_dir, api_url=args.api_url, workers=args.workers, timeout=args.timeout, retries=args.retries, refresh=args.refresh).run(package_versions)
         success = summary.api_errors == 0
+    elif args.source == "pilot":
+        summary = PilotCollector(
+            data_root=args.data_root,
+            dataset_id=args.dataset_id,
+            package_limit=args.package_limit,
+            versions_per_package=args.versions_per_package,
+            chunk_size=args.chunk_size,
+            workers=args.workers,
+            osv_workers=args.osv_workers,
+            timeout=args.timeout,
+            retries=args.retries,
+            shard_size_mb=args.shard_size_mb,
+            min_depsdev_success_rate=args.min_depsdev_success_rate,
+            min_osv_success_rate=args.min_osv_success_rate,
+            npm_query=args.query,
+            npm_registry_url=args.registry_url,
+            depsdev_api_url=args.depsdev_api_url,
+            osv_api_url=args.osv_api_url,
+        ).run()
+        success = summary.criteria_met
     else:
         raise AssertionError("argparse accepted an unsupported source")
     output = summary.to_dict()

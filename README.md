@@ -7,6 +7,7 @@
 ## Структура
 
 - `collector/npm/`, `collector/depsdev/`, `collector/osv/` — сбор исходных данных;
+- `collector/pilot/` — возобновляемая сборка согласованного pilot snapshot;
 - `processing/` — нормализация и исторические срезы;
 - `analysis/` — статистический и security-анализ;
 - `ml/` — прогнозирование;
@@ -101,3 +102,18 @@ RUN_DEPSDEV_INTEGRATION=1 python3 -m unittest tests.test_depsdev_integration
 ```bash
 python3 -m unittest tests.test_osv_collector
 ```
+
+## Согласованный pilot dataset
+
+Одна команда собирает полную npm-историю для замороженной выборки из 3000 пакетов, выбирает до пяти равномерно распределённых исторических версий каждого пакета, обогащает их через deps.dev и OSV и формирует immutable snapshot с compressed shards:
+
+```bash
+./bigdata collect pilot \
+  --dataset-id pilot-v1 \
+  --package-limit 3000 \
+  --versions-per-package 5 \
+  --workers 8 \
+  --osv-workers 8
+```
+
+После прерывания запускается та же команда: npm, deps.dev и OSV используют проверяемые success markers, поэтому уже сохранённые ответы не скачиваются повторно. Готовый snapshot и отчёт находятся в `data/datasets/pilot-v1/`. Подробное описание этапов, критериев и структуры файлов — в [документации pilot](docs/pilot-dataset.md).
