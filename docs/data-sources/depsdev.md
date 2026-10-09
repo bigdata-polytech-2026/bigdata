@@ -39,9 +39,11 @@ Normalized `DependencyRelation` следует [Data Contract v1](../data-contra
 ```bash
 ./bigdata collect depsdev \
   --input-file package-versions.txt \
-  --limit 1000 \
+  --success-limit 1000 \
   --workers 8
 ```
+
+`--success-limit` задает критерий успешного завершения, но не ограничивает и не прерывает обработку входа: команда возвращает код 0, если после полного batch доступно не меньше указанного числа успешных графов. Отдельный `--limit` по-прежнему обрезает вход до первых N уникальных package versions. Без `--success-limit` действует строгий режим: любая API-ошибка приводит к коду 1.
 
 Можно повторять `--package-version`. `--refresh` игнорирует success markers и загружает новый snapshot. Без него повторный запуск использует marker только при совпадении parser version, наличии raw/normalized файлов и совпадении SHA-256 raw-файла.
 
@@ -60,7 +62,7 @@ Raw HTTP body записывается до разбора JSON и не пере
 
 ## Retry и изоляция ошибок
 
-Collector повторяет HTTP 429, 5xx и сетевые ошибки. Задержка — exponential backoff с jitter; числовой `Retry-After` имеет приоритет и ограничивается 60 секундами. 4xx, кроме 429, не повторяются. Ошибка одной версии попадает в event log и manifest, остальные futures продолжают выполняться. Команда завершает полный batch и возвращает ненулевой exit code, если остались API failures.
+Collector повторяет HTTP 429, 5xx и сетевые ошибки. Задержка — exponential backoff с jitter; числовой `Retry-After` имеет приоритет и ограничивается 60 секундами. 4xx, кроме 429, не повторяются. Ошибка одной версии попадает в event log и manifest, остальные futures продолжают выполняться. Команда всегда завершает полный batch. По умолчанию она возвращает ненулевой exit code, если остались API failures; с `--success-limit N` код определяется достижением N успешных графов. Итоговый JSON содержит `success_limit` и `success_target_met`.
 
 ## Ограничения источника
 

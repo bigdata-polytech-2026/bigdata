@@ -98,6 +98,7 @@ def _build_parser() -> argparse.ArgumentParser:
     depsdev.add_argument("--package-version", action="append", default=[], help="npm package and version as PACKAGE@VERSION (repeatable)")
     depsdev.add_argument("--input-file", type=Path, help="UTF-8 file with one PACKAGE@VERSION per line")
     depsdev.add_argument("--limit", type=_positive_int, help="process only the first N unique package versions")
+    depsdev.add_argument("--success-limit", type=_positive_int, help="return exit code 0 after the full batch when at least N graphs succeeded")
     depsdev.add_argument("--workers", type=_positive_int, default=8, help="concurrent deps.dev requests")
     depsdev.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds")
     depsdev.add_argument("--retries", type=_non_negative_int, default=3, help="retries after 429, 5xx, or network errors")
@@ -150,7 +151,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             retries=args.retries,
             refresh=args.refresh,
         ).run(package_versions)
-        success = summary.api_failures == 0
+        success = summary.api_successes >= args.success_limit if args.success_limit is not None else summary.api_failures == 0
     elif args.source == "osv":
         try:
             package_versions = _package_versions(args.package_version, args.input_file)
@@ -160,7 +161,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         success = summary.api_errors == 0
     else:
         raise AssertionError("argparse accepted an unsupported source")
-    print(json.dumps(summary.to_dict(), ensure_ascii=False, sort_keys=True))
+    output = summary.to_dict()
+    if args.source == "depsdev" and args.success_limit is not None:
+        output["success_limit"] = args.success_limit
+        output["success_target_met"] = success
+    print(json.dumps(output, ensure_ascii=False, sort_keys=True))
     return 0 if success else 1
 
 

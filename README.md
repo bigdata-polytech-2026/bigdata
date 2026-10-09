@@ -65,6 +65,14 @@ Collector получает resolved dependency graph для точных npm pac
   --input-file docs/samples/depsdev-package-versions.txt
 ```
 
+Для acceptance batch с ожидаемыми пропусками API можно задать минимальное число успешных графов; весь вход при этом всё равно будет обработан:
+
+```bash
+./bigdata collect depsdev \
+  --input-file docs/samples/depsdev-acceptance-package-versions.txt \
+  --success-limit 1000
+```
+
 Можно передать версии прямо в команде:
 
 ```bash

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -7,8 +9,8 @@ import urllib.error
 from pathlib import Path
 from unittest import mock
 
-from collector.__main__ import _package_versions
-from collector.depsdev.collector import DepsDevCollector, HttpClient, HttpResponse, normalize_graph, retry_delay
+from collector.__main__ import _package_versions, main
+from collector.depsdev.collector import DepsDevCollector, HttpClient, HttpResponse, RunSummary, normalize_graph, retry_delay
 
 
 GRAPH = {
@@ -129,6 +131,41 @@ class DepsDevCollectorTest(unittest.TestCase):
         self.assertEqual(_package_versions(["@scope/pkg@1.2.3", "plain@2.0.0", "plain@2.0.0"], None), [("@scope/pkg", "1.2.3"), ("plain", "2.0.0")])
         self.assertEqual(retry_delay(0, "4.5"), 4.5)
         self.assertEqual(retry_delay(10, "100"), 60.0)
+
+    def test_cli_success_limit_allows_isolated_api_failures(self):
+        summary = RunSummary(run_id="test", target=2, processed=2, api_successes=1, api_failures=1)
+        arguments = [
+            "collect",
+            "depsdev",
+            "--package-version",
+            "good@1.0.0",
+            "--package-version",
+            "missing@1.0.0",
+        ]
+
+        with mock.patch("collector.__main__.DepsDevCollector") as collector:
+            collector.return_value.run.return_value = summary
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(arguments), 1)
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main([*arguments, "--success-limit", "1"]), 0)
+
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["success_limit"], 1)
+        self.assertTrue(result["success_target_met"])
+
+    def test_cli_success_limit_returns_nonzero_when_target_is_not_met(self):
+        summary = RunSummary(run_id="test", target=2, processed=2, api_successes=1, api_failures=1)
+        with mock.patch("collector.__main__.DepsDevCollector") as collector:
+            collector.return_value.run.return_value = summary
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exit_code = main(["collect", "depsdev", "--package-version", "good@1.0.0", "--success-limit", "2"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(json.loads(output.getvalue())["success_target_met"])
 
     def test_http_client_retries_temporary_network_error(self):
         with mock.patch("collector.depsdev.collector.urllib.request.urlopen", side_effect=[urllib.error.URLError("temporary"), UrlopenResponse()]) as urlopen:

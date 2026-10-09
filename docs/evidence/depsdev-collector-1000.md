@@ -46,7 +46,19 @@ Run ID: `20261007T223829830956Z-0fc5c02d`. Parser version: `depsdev-collector@1.
 
 ## Top-up и критерий 1000 успешных версий
 
-Повторный запуск по 1100 строкам использовал 958 валидных markers, повторно показал 42 явных 404 и загрузил еще 100 графов. Итог:
+Повторный запуск по 1100 строкам выполняется с явным критерием успешного завершения:
+
+```bash
+./bigdata collect depsdev \
+  --input-file docs/samples/depsdev-acceptance-package-versions.txt \
+  --success-limit 1000 \
+  --workers 8 \
+  --timeout 30 \
+  --retries 3 \
+  --data-dir data/acceptance/depsdev-1000-final
+```
+
+Он использовал 958 валидных markers, повторно показал 42 явных 404 и загрузил еще 100 графов. Поскольку доступно 1058 успешных графов, команда возвращает код 0, несмотря на изолированные API failures. Итог:
 
 - доступно 1058 успешно обработанных package versions;
 - success rate по 1100 входам — 96.1818%;
