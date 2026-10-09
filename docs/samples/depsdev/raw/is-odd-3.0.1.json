@@ -1,0 +1,1 @@
+{"nodes":[{"versionKey":{"system":"NPM", "name":"is-odd", "version":"3.0.1"}, "bundled":false, "relation":"SELF", "errors":[]}, {"versionKey":{"system":"NPM", "name":"is-number", "version":"6.0.0"}, "bundled":false, "relation":"DIRECT", "errors":[]}], "edges":[{"fromNode":0, "toNode":1, "requirement":"^6.0.0"}], "error":""}

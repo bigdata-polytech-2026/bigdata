@@ -75,7 +75,7 @@
 
 ## DependencyRelation
 
-Одна запись на ребро графа `GetDependencies` deps.dev для выбранного корня. `source_package/source_version` здесь означают узел, который объявляет ребро (`fromNode`), а `dependency_package/resolved_version` — узел назначения (`toNode`). Поэтому в транзитивном ребре `source_package` не совпадает с корнем графа. Номер версии уже разрешен deps.dev для своего сценария установки; его нельзя подставлять вместо `v_req(t)` из A1. [Описание графа deps.dev](https://docs.deps.dev/api/v3alpha/#getdependencies) прямо разделяет `nodes`, `edges` и их индексы.
+Одна запись на ребро графа `GetDependencies` deps.dev для выбранного корня. `source_package/source_version` здесь означают узел, который объявляет ребро (`fromNode`), а `dependency_package/resolved_version` — узел назначения (`toNode`). Поэтому в транзитивном ребре `source_package` не совпадает с корнем графа. Номер версии уже разрешен deps.dev для своего сценария установки; его нельзя подставлять вместо `v_req(t)` из A1. [Описание графа deps.dev](https://docs.deps.dev/api/v3/#getdependencies) прямо разделяет `nodes`, `edges` и их индексы.
 
 Физический ключ ребра: `(root_package, root_version, provenance.snapshot_id, provenance.parser_version, edge_index)`. Один и тот же пакет/версия может быть несколькими узлами графа, поэтому пара имен не является ключом ребра. В новом снимке или при другой `parser_version` `edge_index` нельзя использовать для связи с прежней записью.
 
@@ -93,7 +93,7 @@
 | `depth` | integer ≥ 1 | да | Кратчайшее число ребер от корневого узла `nodes[0]` до `to_node`, вычисляет collector по всему графу. Для прямой зависимости 1. |
 | `source` | string, `depsdev` | да | Источник разрешенного графа. |
 
-Граф с общей ошибкой `error`, узлы с `errors` и bundled-узлы с локальными именами сохраняем в raw, но затронутые ребра не выдаем как обычные npm `DependencyRelation`; считаем пропуски. Если до `to_node` нет пути от корня, это поврежденный граф и такое ребро тоже пропускаем. При нескольких путях `depth` — минимум. В v1 relation не включает дату разрешения версии в прошлом: deps.dev дает граф на момент своего расчета, его нельзя считать историческим lockfile. Условия окружения deps.dev описаны в [API](https://docs.deps.dev/api/v3alpha/#getdependencies).
+Граф с общей ошибкой `error`, узлы с `errors` и bundled-узлы с локальными именами сохраняем в raw, но затронутые ребра не выдаем как обычные npm `DependencyRelation`; считаем пропуски. Если до `to_node` нет пути от корня, это поврежденный граф и такое ребро тоже пропускаем. При нескольких путях `depth` — минимум. В v1 relation не включает дату разрешения версии в прошлом: deps.dev дает граф на момент своего расчета, его нельзя считать историческим lockfile. Условия окружения deps.dev описаны в [API](https://docs.deps.dev/api/v3/#getdependencies).
 
 ## Vulnerability
 
