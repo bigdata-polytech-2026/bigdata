@@ -83,7 +83,27 @@ DVC создаст рядом с каждым output файл `<name>.dvc` и л
 
 ## `.dvc` и pipeline-файлы
 
-Сейчас данные версионируются отдельными `.dvc`-файлами, потому что репозиторий еще не содержит законченного pipeline сборки Parquet-датасета. Когда появятся воспроизводимые processing-команды, их нужно описать в `dvc.yaml`; после первого `dvc repro` DVC создаст `dvc.lock` с точными хэшами входов и выходов. Пустой или фиктивный pipeline в репозиторий не добавляем.
+Collector snapshots версионируются отдельными `.dvc`-файлами. Processing stage
+`normalize_pilot` описан в `dvc.yaml`; `dvc.lock` фиксирует хэши исходников,
+immutable `data/datasets/pilot-v1` и производного Parquet output
+`data/datasets/pilot-v1-normalized/normalized`. Исходный descriptor `pilot-v1.dvc`
+остаётся неизменным: добавлять результаты внутрь опубликованного snapshot нельзя.
+
+После установки Python/Node зависимостей по
+[инструкции normalization](../processing/normalization/README.md):
+
+```bash
+.venv/bin/dvc pull data/datasets/pilot-v1.dvc
+.venv/bin/dvc repro normalize_pilot
+.venv/bin/dvc push dvc.yaml:normalize_pilot
+git add dvc.yaml dvc.lock
+git commit -m "feat: normalize pilot dataset to Parquet"
+```
+
+Готовые Parquet восстанавливаются командой
+`.venv/bin/dvc pull dvc.yaml:normalize_pilot`. Для нового опубликованного результата
+выбираем новый output path в stage; прежние commits продолжают ссылаться на свои
+hashes. Данные отправляются в remote перед передачей commit другим участникам.
 
 ## Что физически лежит в Object Storage
 

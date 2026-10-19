@@ -1,0 +1,56 @@
+schema: '2.0'
+stages:
+  normalize_pilot:
+    cmd: >-
+      .venv/bin/python bigdata normalize pilot --dataset-dir
+      data/datasets/pilot-v1 --output-dir
+      data/datasets/pilot-v1-normalized/normalized
+    deps:
+    - path: bigdata
+      hash: md5
+      md5: b2d6ee0dc46d8e85c12b1a8fd36061cd
+      size: 117
+      isexec: true
+    - path: collector/__main__.py
+      hash: md5
+      md5: 04da84ea0d6ae9ff7e3b6c5ba5f6737a
+      size: 13285
+    - path: collector/depsdev/collector.py
+      hash: md5
+      md5: 8c63df922fe431c90e8ff1527cf6c760
+      size: 21649
+    - path: collector/npm/collector.py
+      hash: md5
+      md5: 8bf7f2140c8e6b1dab425fff257fd247
+      size: 22379
+    - path: data/datasets/pilot-v1
+      hash: md5
+      md5: 4732d00dbe9aaa96a016c65c9e28eab8.dir
+      size: 436761815
+      nfiles: 19
+    - path: processing/normalization/package-lock.json
+      hash: md5
+      md5: 3f9949c2eaa92208024e377b3fc19536
+      size: 646
+    - path: processing/normalization/package.json
+      hash: md5
+      md5: f2caeaf41980613646c0c87bd272e58d
+      size: 116
+    - path: processing/normalization/pipeline.py
+      hash: md5
+      md5: f7828eba8a5f9e90840a758b8a948b00
+      size: 26797
+    - path: processing/normalization/requirements.txt
+      hash: md5
+      md5: 9ea36da1c86298dc68cdadfb8f247832
+      size: 30
+    - path: processing/normalization/version-quality.cjs
+      hash: md5
+      md5: 8ad28bc030584ad828891d901bb39aaa
+      size: 377
+    outs:
+    - path: data/datasets/pilot-v1-normalized/normalized
+      hash: md5
+      md5: cb9262db42bbc1160e4a4385de1b42f3.dir
+      size: 65444028
+      nfiles: 10

@@ -117,3 +117,11 @@ python3 -m unittest tests.test_osv_collector
 ```
 
 После прерывания запускается та же команда: npm, deps.dev и OSV используют проверяемые success markers, поэтому уже сохранённые ответы не скачиваются повторно. Готовый snapshot и отчёт находятся в `data/datasets/pilot-v1/`. Подробное описание этапов, критериев и структуры файлов — в [документации pilot](docs/pilot-dataset.md).
+
+## Нормализация pilot dataset
+
+Сборка Parquet из собранных raw npm/deps.dev: `.venv/bin/python bigdata normalize pilot`.
+Результат хранится отдельно в `data/datasets/pilot-v1-normalized/normalized/`;
+DVC stage запускается `.venv/bin/dvc repro normalize_pilot`.
+Установка зависимостей, схема таблиц и воспроизводимость описаны в
+[processing/normalization/README.md](processing/normalization/README.md).

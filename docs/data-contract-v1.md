@@ -128,6 +128,15 @@ Processing читает эти записи, связывает их по пак
 
 ## Изменения и review
 
+Физическое представление processing в Parquet описано в
+[normalization README](../processing/normalization/README.md). Четыре основные
+таблицы сохраняют поля, natural keys и смысл v1. Произвольные JSON `repository`
+и `dist_tags` кодируются lossless JSON strings, `provenance` — struct, timestamps
+остаются RFC3339 strings с исходной точностью. Это адаптер хранения, а не изменение
+JSONL-контракта collector. Проверки SemVer и причины исключений хранятся отдельно
+в `version_quality`; joins и предварительные признаки lag — в отдельных
+`relation_matches` и `technical_lag_inputs`, а не добавляются в сущности v1.
+
 `schema_version` имеет вид `MAJOR.MINOR.PATCH`. Исправление описания без изменения данных — patch. Добавление необязательного поля — minor. Переименование поля, смена типа/ключа, изменение смысла или превращение nullable в обязательное — major. После merge любой breaking change оформляем отдельным PR с новой схемой и правилами миграции; старые записи не переписываем молча.
 
 Если проект когда-нибудь начнет обрабатывать несколько экосистем, добавление `ecosystem` в записи и ключи будет отдельным breaking change, а не неявным расширением v1.

@@ -1,0 +1,16 @@
+stages:
+  normalize_pilot:
+    cmd: .venv/bin/python bigdata normalize pilot --dataset-dir data/datasets/pilot-v1 --output-dir data/datasets/pilot-v1-normalized/normalized
+    deps:
+      - bigdata
+      - collector/__main__.py
+      - collector/npm/collector.py
+      - collector/depsdev/collector.py
+      - processing/normalization/pipeline.py
+      - processing/normalization/version-quality.cjs
+      - processing/normalization/package.json
+      - processing/normalization/package-lock.json
+      - processing/normalization/requirements.txt
+      - data/datasets/pilot-v1
+    outs:
+      - data/datasets/pilot-v1-normalized/normalized
