@@ -64,7 +64,21 @@ data/
 
 Raw archives сохраняют исходные bytes и относительные пути файлов. Audit archives содержат активные state markers и manifests, по которым проверяются identity, parser version и SHA-256. Normalized shards записываются потоково; целевой compressed size по умолчанию 128 MiB.
 
-`jsonl.gz` выбран для pilot, потому что он доступен в стандартной библиотеке Python и позволяет проверить join без установки тяжелого стека. После измерения pilot full pipeline сможет добавить Parquet с размером row group, выбранным по реальным данным.
+Collector сохраняет `jsonl.gz` с помощью стандартной библиотеки Python. Отдельный
+этап normalization пересчитывает npm/deps.dev сущности из raw и сохраняет Parquet
+в отдельный `data/datasets/pilot-v1-normalized/normalized/`, вместе со связями,
+статистикой unmatched и входами technical lag. Immutable `pilot-v1` не изменяется:
+
+```bash
+.venv/bin/python -m pip install -r processing/normalization/requirements.txt
+npm ci --prefix processing/normalization --ignore-scripts
+.venv/bin/python bigdata normalize pilot
+```
+
+Схема таблиц, особенности provenance старого pilot и проверки описаны в
+[processing/normalization/README.md](../processing/normalization/README.md).
+Stage `normalize_pilot` в `dvc.yaml` позволяет выполнить ту же сборку через
+`.venv/bin/dvc repro normalize_pilot`; hashes фиксируются в `dvc.lock`.
 
 ## Результат и публикация
 

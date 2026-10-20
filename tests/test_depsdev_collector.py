@@ -89,6 +89,9 @@ class DepsDevCollectorTest(unittest.TestCase):
             self.assertEqual(records[2]["depth"], 1)
             self.assertEqual(records[3]["depth"], 2)
             self.assertTrue(all(record["source"] == "depsdev" for record in records))
+            state_path = next((data_dir / "state" / "depsdev").glob("*.json"))
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["retrieved_at"], records[0]["provenance"]["retrieved_at"])
 
             resumed = DepsDevCollector(data_dir, api_url="https://deps.example", workers=1, client=NoNetworkClient()).run([("@scope/root", "1.0.0+meta")])
             self.assertEqual((resumed.processed, resumed.downloaded, resumed.skipped, resumed.api_successes), (1, 0, 1, 1))

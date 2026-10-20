@@ -16,6 +16,7 @@ data/
 │   └── v1/<entity>/YYYY-MM-DD/
 ├── datasets/
 │   ├── pilot-v1/             # immutable compacted pilot snapshot
+│   ├── pilot-v1-normalized/  # отдельный производный Parquet dataset
 │   └── technical-lag-vN/
 └── artifacts/
     └── dvc-smoke-v1/
@@ -26,5 +27,9 @@ data/
 Отдельные collectors сохраняют аудируемые raw-ответы и normalized JSONL. Команда `collect pilot` использует `landing/<dataset-id>` как возобновляемое рабочее состояние, а затем формирует immutable `datasets/<dataset-id>`: byte-exact raw-файлы и audit metadata упаковываются в `tar.gz`, normalized entities — в `jsonl.gz` shards. Миллионы мелких рабочих файлов из `landing` в DVC/S3 не публикуем.
 
 `artifacts/dvc-smoke-v1.dvc` описывает маленький контрольный файл. Он нужен, чтобы новый участник мог сразу проверить доступ к remote командой `dvc pull` без загрузки большого датасета.
+
+Stage `normalize_pilot` в `dvc.yaml` пересчитывает npm/deps.dev из `pilot-v1` и
+сохраняет Parquet отдельно в `pilot-v1-normalized/normalized`. Старый snapshot
+и его `.dvc` descriptor не меняются; производный output версионируется `dvc.lock`.
 
 Полный рабочий процесс описан в [`docs/data-versioning.md`](../docs/data-versioning.md).

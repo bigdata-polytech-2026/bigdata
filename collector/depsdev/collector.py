@@ -472,7 +472,7 @@ class DepsDevCollector:
             nodes_with_errors=graph.nodes_with_errors,
             bundled_nodes=graph.bundled_nodes,
         )
-        state = {**result.to_result(status="complete"), "request_url": request_url, "http_status": response.status, "raw_sha256": raw_sha256, "etag": response.headers.get("etag"), "parser_version": self.parser_version}
+        state = {**result.to_result(status="complete"), "request_url": request_url, "retrieved_at": retrieved_at, "http_status": response.status, "raw_sha256": raw_sha256, "etag": response.headers.get("etag"), "parser_version": self.parser_version}
         _atomic_write(self._state_path(package_name, version), _json_bytes(state, pretty=True))
         assert self._event_log is not None
         self._event_log.write("graph_normalized", run_id=run_id, package_name=package_name, version=version, snapshot_id=snapshot_id, warnings=list(graph.warnings))

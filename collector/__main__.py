@@ -81,6 +81,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bigdata", description="Technical-lag data collectors")
     commands = parser.add_subparsers(dest="command", required=True)
 
+    normalize = commands.add_parser("normalize", help="build Data Contract Parquet tables from archived raw data")
+    normalization = normalize.add_subparsers(dest="normalization", required=True)
+    pilot_normalization = normalization.add_parser("pilot", help="normalize the collected pilot snapshot offline")
+    pilot_normalization.add_argument("--dataset-dir", type=Path, default=Path("data/datasets/pilot-v1"))
+    pilot_normalization.add_argument("--output-dir", type=Path, help="separate derived output; default: sibling <dataset-id>-normalized/normalized")
+
     collect = commands.add_parser("collect", help="collect source data")
     sources = collect.add_subparsers(dest="source", required=True)
 
@@ -154,6 +160,17 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.command == "normalize":
+        from processing.normalization.pipeline import run
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        try:
+            report = run(args.dataset_dir, args.output_dir)
+        except ImportError as exc:
+            parser.error(f"{exc}; install processing/normalization/requirements.txt")
+        except (ValueError, OSError) as exc:
+            parser.exit(1, f"normalization failed: {exc}\n")
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        return 0
     if args.command != "collect":
         raise AssertionError("argparse accepted an unsupported command")
 
