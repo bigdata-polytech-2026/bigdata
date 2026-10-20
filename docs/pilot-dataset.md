@@ -80,6 +80,19 @@ npm ci --prefix processing/normalization --ignore-scripts
 Stage `normalize_pilot` в `dvc.yaml` позволяет выполнить ту же сборку через
 `.venv/bin/dvc repro normalize_pilot`; hashes фиксируются в `dvc.lock`.
 
+Исторические lag-признаки по всем normalized requirements рассчитываются downstream
+stage без изменения обоих входных snapshots:
+
+```bash
+npm ci --prefix processing/technical_lag --ignore-scripts
+.venv/bin/python -m pip install -r processing/technical_lag/requirements.txt
+.venv/bin/dvc repro technical_lag_pilot
+```
+
+Результат и отчёт находятся в
+`data/datasets/pilot-v1-technical-lag/technical_lag/`; подробности — в
+[processing/technical_lag/README.md](../processing/technical_lag/README.md).
+
 ## Результат и публикация
 
 Финальная строка stdout — JSON summary. Основной человекочитаемый результат находится в `data/datasets/pilot-v1/report.md`, полный список shards и checksums — в `manifest.json`.

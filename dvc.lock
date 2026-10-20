@@ -54,3 +54,48 @@ stages:
       md5: cb9262db42bbc1160e4a4385de1b42f3.dir
       size: 65444028
       nfiles: 10
+  technical_lag_pilot:
+    cmd: >-
+      .venv/bin/python -m processing.technical_lag pilot --input-dir
+      data/datasets/pilot-v1-normalized/normalized --output-dir
+      data/datasets/pilot-v1-technical-lag/technical_lag
+    deps:
+    - path: data/datasets/pilot-v1-normalized/normalized
+      hash: md5
+      md5: cb9262db42bbc1160e4a4385de1b42f3.dir
+      size: 65444028
+      nfiles: 10
+    - path: processing/technical_lag/__main__.py
+      hash: md5
+      md5: 9fd3e79bc8072aea332ae29c719b1d43
+      size: 1578
+    - path: processing/technical_lag/core.cjs
+      hash: md5
+      md5: 092cc0f92f8c1608bc88bc3354ceb388
+      size: 9683
+    - path: processing/technical_lag/package-lock.json
+      hash: md5
+      md5: 5a503eb823af203e4ebd1ac4f234cbee
+      size: 695
+    - path: processing/technical_lag/package.json
+      hash: md5
+      md5: 7b4af66264e54be4f9dc482c4c297f6c
+      size: 219
+    - path: processing/technical_lag/pipeline.py
+      hash: md5
+      md5: 07f1802979f713be84f461af85712318
+      size: 21753
+    - path: processing/technical_lag/requirements.txt
+      hash: md5
+      md5: 9ea36da1c86298dc68cdadfb8f247832
+      size: 30
+    - path: processing/technical_lag/runner.cjs
+      hash: md5
+      md5: 4ae5e4c5c00d10edc84b4ec7b5c99e30
+      size: 3332
+    outs:
+    - path: data/datasets/pilot-v1-technical-lag/technical_lag
+      hash: md5
+      md5: e7bcccaf6736f4d44c8f1b19db26c3a9.dir
+      size: 27815311
+      nfiles: 4

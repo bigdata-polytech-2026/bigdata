@@ -125,3 +125,12 @@ python3 -m unittest tests.test_osv_collector
 DVC stage запускается `.venv/bin/dvc repro normalize_pilot`.
 Установка зависимостей, схема таблиц и воспроизводимость описаны в
 [processing/normalization/README.md](processing/normalization/README.md).
+
+## Technical lag для pilot dataset
+
+После нормализации полный расчёт запускается `.venv/bin/dvc repro technical_lag_pilot`.
+Все требования сохраняются в отдельном
+`data/datasets/pilot-v1-technical-lag/technical_lag/technical_lag.parquet`:
+успешные строки содержат time/version lag и patch/minor/major, исключённые — причину
+и `NULL`-метрики. Формат, ограничения и статистика описаны в
+[processing/technical_lag/README.md](processing/technical_lag/README.md).

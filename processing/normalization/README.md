@@ -68,11 +68,12 @@ strings; `NULL` repository сохраняется SQL NULL. Декодирова
 `technical_lag_inputs` готовит связи и даты для следующего этапа, но не считает lag.
 `preparation_exclusion_reason IS NULL` означает кандидата. Версии потребителей уже
 проверены strict `semver@7.8.4` без coerce, prerelease и версии без даты помечены.
-Следующему этапу ещё нужны проверки диапазонов, времени обоих снимков и полноты
-истории по `docs/technical-lag-definition.md`. Для отсутствующих packuments истории
-нет. npm aliases исключаются из основного анализа; другие non-SemVer требования
-классифицирует следующий этап. Граф deps.dev не подставляется вместо исторического
-`v_req`. Snapshot имеет ограниченную enrichment-выборку; это не полный граф npm.
+Downstream stage `technical_lag_pilot` выполняет проверки диапазонов, времени обоих
+снимков и полноты истории по `docs/technical-lag-definition.md`. Для отсутствующих
+packuments истории нет. npm aliases исключаются из основного анализа; другие
+non-SemVer требования классифицирует lag stage. Граф deps.dev не подставляется
+вместо исторического `v_req`. Snapshot имеет ограниченную enrichment-выборку;
+это не полный граф npm.
 
 Обработка потоковая по raw-ответам; Arrow batches по 16 384 строки. В памяти
 находится один packument/graph, его нормализованные записи и audit states.

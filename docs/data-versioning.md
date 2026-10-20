@@ -84,10 +84,13 @@ DVC создаст рядом с каждым output файл `<name>.dvc` и л
 ## `.dvc` и pipeline-файлы
 
 Collector snapshots версионируются отдельными `.dvc`-файлами. Processing stage
-`normalize_pilot` описан в `dvc.yaml`; `dvc.lock` фиксирует хэши исходников,
+`normalize_pilot` и downstream `technical_lag_pilot` описаны в `dvc.yaml`;
+`dvc.lock` фиксирует хэши исходников,
 immutable `data/datasets/pilot-v1` и производного Parquet output
 `data/datasets/pilot-v1-normalized/normalized`. Исходный descriptor `pilot-v1.dvc`
 остаётся неизменным: добавлять результаты внутрь опубликованного snapshot нельзя.
+Lag stage читает точный hash нормализации и пишет отдельный immutable output
+`data/datasets/pilot-v1-technical-lag/technical_lag`.
 
 После установки Python/Node зависимостей по
 [инструкции normalization](../processing/normalization/README.md):
@@ -96,14 +99,18 @@ immutable `data/datasets/pilot-v1` и производного Parquet output
 .venv/bin/dvc pull data/datasets/pilot-v1.dvc
 .venv/bin/dvc repro normalize_pilot
 .venv/bin/dvc push dvc.yaml:normalize_pilot
+.venv/bin/dvc repro technical_lag_pilot
+.venv/bin/dvc push dvc.yaml:technical_lag_pilot
 git add dvc.yaml dvc.lock
-git commit -m "feat: normalize pilot dataset to Parquet"
+git commit -m "feat: calculate pilot technical lag"
 ```
 
 Готовые Parquet восстанавливаются командой
 `.venv/bin/dvc pull dvc.yaml:normalize_pilot`. Для нового опубликованного результата
 выбираем новый output path в stage; прежние commits продолжают ссылаться на свои
 hashes. Данные отправляются в remote перед передачей commit другим участникам.
+Lag output восстанавливается командой
+`.venv/bin/dvc pull dvc.yaml:technical_lag_pilot`.
 
 ## Что физически лежит в Object Storage
 
