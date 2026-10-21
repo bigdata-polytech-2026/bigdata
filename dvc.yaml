@@ -27,3 +27,13 @@ stages:
       - data/datasets/pilot-v1-normalized/normalized
     outs:
       - data/datasets/pilot-v1-technical-lag/technical_lag
+  security_enrichment_pilot:
+    cmd: .venv/bin/python -m processing.security --dataset-dir data/datasets/pilot-v1 --versions-dir data/datasets/pilot-v1-normalized/normalized --output-dir data/datasets/pilot-v1-security/security
+    deps:
+      - processing/security/__main__.py
+      - processing/security/pipeline.py
+      - processing/security/requirements.txt
+      - data/datasets/pilot-v1
+      - data/datasets/pilot-v1-normalized/normalized
+    outs:
+      - data/datasets/pilot-v1-security/security
