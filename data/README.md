@@ -17,7 +17,8 @@ data/
 ├── datasets/
 │   ├── pilot-v1/             # immutable compacted pilot snapshot
 │   ├── pilot-v1-normalized/  # отдельный производный Parquet dataset
-│   └── technical-lag-vN/
+│   ├── pilot-v1-technical-lag/ # рассчитанные lag-признаки pilot
+│   └── technical-lag-vN/      # будущие версии итоговых datasets
 └── artifacts/
     └── dvc-smoke-v1/
 ```
@@ -31,5 +32,7 @@ data/
 Stage `normalize_pilot` в `dvc.yaml` пересчитывает npm/deps.dev из `pilot-v1` и
 сохраняет Parquet отдельно в `pilot-v1-normalized/normalized`. Старый snapshot
 и его `.dvc` descriptor не меняются; производный output версионируется `dvc.lock`.
+Следующий stage `technical_lag_pilot` читает этот точный DVC output и сохраняет
+расчёт отдельно в `pilot-v1-technical-lag/technical_lag`.
 
 Полный рабочий процесс описан в [`docs/data-versioning.md`](../docs/data-versioning.md).

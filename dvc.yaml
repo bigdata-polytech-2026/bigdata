@@ -14,3 +14,16 @@ stages:
       - data/datasets/pilot-v1
     outs:
       - data/datasets/pilot-v1-normalized/normalized
+  technical_lag_pilot:
+    cmd: .venv/bin/python -m processing.technical_lag pilot --input-dir data/datasets/pilot-v1-normalized/normalized --output-dir data/datasets/pilot-v1-technical-lag/technical_lag
+    deps:
+      - processing/technical_lag/__main__.py
+      - processing/technical_lag/pipeline.py
+      - processing/technical_lag/core.cjs
+      - processing/technical_lag/runner.cjs
+      - processing/technical_lag/package.json
+      - processing/technical_lag/package-lock.json
+      - processing/technical_lag/requirements.txt
+      - data/datasets/pilot-v1-normalized/normalized
+    outs:
+      - data/datasets/pilot-v1-technical-lag/technical_lag
