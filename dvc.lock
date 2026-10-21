@@ -1,9 +1,8 @@
 schema: '2.0'
 stages:
   normalize_pilot:
-    cmd: >-
-      .venv/bin/python bigdata normalize pilot --dataset-dir
-      data/datasets/pilot-v1 --output-dir
+    cmd: .venv/bin/python bigdata normalize pilot --dataset-dir 
+      data/datasets/pilot-v1 --output-dir 
       data/datasets/pilot-v1-normalized/normalized
     deps:
     - path: bigdata
@@ -51,8 +50,8 @@ stages:
     outs:
     - path: data/datasets/pilot-v1-normalized/normalized
       hash: md5
-      md5: cb9262db42bbc1160e4a4385de1b42f3.dir
-      size: 65444028
+      md5: 8f2506a4a6bb555c8064a47355321352.dir
+      size: 65382360
       nfiles: 10
   technical_lag_pilot:
     cmd: >-
@@ -98,4 +97,38 @@ stages:
       hash: md5
       md5: e7bcccaf6736f4d44c8f1b19db26c3a9.dir
       size: 27815311
+      nfiles: 4
+  security_enrichment_pilot:
+    cmd: .venv/bin/python -m processing.security --dataset-dir 
+      data/datasets/pilot-v1 --versions-dir 
+      data/datasets/pilot-v1-normalized/normalized --output-dir 
+      data/datasets/pilot-v1-security/security
+    deps:
+    - path: data/datasets/pilot-v1
+      hash: md5
+      md5: 4732d00dbe9aaa96a016c65c9e28eab8.dir
+      size: 436761815
+      nfiles: 19
+    - path: data/datasets/pilot-v1-normalized/normalized
+      hash: md5
+      md5: 8f2506a4a6bb555c8064a47355321352.dir
+      size: 65382360
+      nfiles: 10
+    - path: processing/security/__main__.py
+      hash: md5
+      md5: ae6727ed734460bd39738baf1a55a77f
+      size: 796
+    - path: processing/security/pipeline.py
+      hash: md5
+      md5: 9b6db434bafc5a160e6f7c14d90f718e
+      size: 12569
+    - path: processing/security/requirements.txt
+      hash: md5
+      md5: cab16103084ce97f75b08b07ee0c6613
+      size: 16
+    outs:
+    - path: data/datasets/pilot-v1-security/security
+      hash: md5
+      md5: bfe234a3ea4ea2799491cd5158f8a498.dir
+      size: 1224963
       nfiles: 4
