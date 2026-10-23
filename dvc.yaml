@@ -27,3 +27,14 @@ stages:
       - data/datasets/pilot-v1-normalized/normalized
     outs:
       - data/datasets/pilot-v1-technical-lag/technical_lag
+  temporal_pilot:
+    cmd: .venv/bin/python -m processing.temporal --input-dir data/datasets/pilot-v1-normalized/normalized --output-dir data/datasets/pilot-v1-temporal/temporal
+    deps:
+      - processing/temporal/__main__.py
+      - processing/temporal/pipeline.py
+      - processing/temporal/requirements.txt
+      - processing/technical_lag/core.cjs
+      - processing/technical_lag/runner.cjs
+      - data/datasets/pilot-v1-normalized/normalized
+    outs:
+      - data/datasets/pilot-v1-temporal/temporal
