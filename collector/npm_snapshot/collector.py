@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import io
 import json
+import logging
 import os
 import tarfile
 import tempfile
@@ -27,6 +28,7 @@ from collector.npm.collector import (
 
 
 SNAPSHOT_VERSION = "1.0.0"
+LOG = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -172,6 +174,7 @@ class NpmSnapshotCollector:
         packages_path = self.work_dir / "inputs" / "packages.txt"
         if packages_path.is_file():
             names = [line for line in packages_path.read_text(encoding="utf-8").splitlines() if line]
+            self._restore_discovery_shard()
         elif package_names is not None:
             names = list(dict.fromkeys(package_names))
             if self.package_limit:
@@ -186,6 +189,8 @@ class NpmSnapshotCollector:
 
         summary = SnapshotSummary(self.dataset_id, "collecting", len(names))
         all_batch_records = []
+        batch_count = (len(names) + self.batch_size - 1) // self.batch_size
+        LOG.info("npm snapshot %s: %d packages in %d batches", self.dataset_id, len(names), batch_count)
         for index in range(0, len(names), self.batch_size):
             number = index // self.batch_size
             batch_names = names[index:index + self.batch_size]
@@ -198,6 +203,16 @@ class NpmSnapshotCollector:
             summary.failed += len(record["failures"])
             summary.warnings += record["warnings"]
             summary.raw_bytes += record["raw"]["input_bytes"]
+            LOG.info(
+                "npm snapshot %s: batch %d/%d complete, %d/%d packages, %d versions, %d requirements",
+                self.dataset_id,
+                number + 1,
+                batch_count,
+                summary.packages,
+                summary.package_target,
+                summary.package_versions,
+                summary.dependency_requirements,
+            )
 
         summary.status = "complete" if summary.failed == 0 and summary.packages == summary.package_target else "incomplete"
         if summary.status != "complete":
@@ -227,6 +242,8 @@ class NpmSnapshotCollector:
         self._validate_snapshot(self.build_dir, manifest)
         self.snapshot_dir.parent.mkdir(parents=True, exist_ok=True)
         os.replace(self.build_dir, self.snapshot_dir)
+        LOG.info("npm snapshot %s complete: %.2f GiB compressed", self.dataset_id,
+                 summary.snapshot_bytes / (1024 ** 3))
         return summary
 
     def _existing(self) -> Optional[SnapshotSummary]:
@@ -288,6 +305,16 @@ class NpmSnapshotCollector:
         for path in directory.glob("*.json"):
             path.unlink()
         directory.rmdir()
+
+    def _restore_discovery_shard(self) -> None:
+        """Finish discovery compaction when a previous run stopped after freezing names."""
+        destination = self.build_dir / "raw" / "npm" / "part-search.tar.gz"
+        if destination.is_file():
+            return
+        discovery_dir = self.work_dir / "discovery"
+        if discovery_dir.is_dir() and any(discovery_dir.glob("*.json")):
+            LOG.info("restoring npm search shard from interrupted discovery")
+            self._compact_discovery(discovery_dir)
 
     def _discovery_record(self) -> Optional[Dict[str, Any]]:
         path = self.build_dir / "raw" / "npm" / "part-search.tar.gz"
