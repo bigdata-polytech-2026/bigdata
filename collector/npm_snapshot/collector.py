@@ -30,6 +30,7 @@ from collector.npm.collector import (
 
 
 SNAPSHOT_VERSION = "1.0.0"
+MAX_PACKAGE_ATTEMPTS = 5
 LOG = logging.getLogger(__name__)
 
 
@@ -200,17 +201,45 @@ class NpmSnapshotCollector:
         all_batch_records = []
         seen = set(names)
         attempts = collections.Counter(names)
+        existing_states = sorted((self.work_dir / "batches").glob("part-*.json"))
+        completed = set()
+        if self.expand_dependencies:
+            for path in existing_states:
+                record = json.loads(path.read_text(encoding="utf-8"))
+                failed_names = {item["package"] for item in record.get("failures", [])}
+                completed.update(name for name in record.get("names", []) if name not in failed_names)
+        counted_successes = set()
         index = 0
         LOG.info("npm snapshot %s: %d seed packages, target %d successful packages",
                  self.dataset_id, len(names), target)
         while index < len(names) and summary.packages < target:
             number = len(all_batch_records)
             remaining = target - summary.packages
-            batch_names = names[index:index + min(self.batch_size, remaining)]
+            limit = min(self.batch_size, remaining)
+            if number < len(existing_states):
+                saved = json.loads(existing_states[number].read_text(encoding="utf-8"))
+                batch_names = names[index:index + len(saved["names"])]
+                if batch_names != saved["names"]:
+                    raise ValueError(f"saved batch {number} no longer matches the frozen package queue")
+                index += len(batch_names)
+            else:
+                batch_names = []
+                while index < len(names) and len(batch_names) < limit:
+                    name = names[index]
+                    index += 1
+                    if not self.expand_dependencies or name not in completed:
+                        batch_names.append(name)
+                if not batch_names:
+                    continue
             record = self._batch(number, batch_names)
             all_batch_records.append(record)
+            failed_names = {item["package"] for item in record["failures"]}
+            successful_names = set(record["names"]) - failed_names
+            new_successes = successful_names - counted_successes
+            counted_successes.update(successful_names)
+            completed.update(successful_names)
             summary.batches += 1
-            summary.packages += record["packages"]
+            summary.packages += len(new_successes)
             summary.package_versions += record["versions"]
             summary.dependency_requirements += record["requirements"]
             summary.failed += len(record["failures"])
@@ -224,12 +253,12 @@ class NpmSnapshotCollector:
                 retries = []
                 for failure in record["failures"]:
                     name = failure["package"]
-                    if not failure["terminal"] and attempts[name] < 3:
+                    if (not failure["terminal"] and name not in completed
+                            and attempts[name] < MAX_PACKAGE_ATTEMPTS):
                         retries.append(name)
                         attempts[name] += 1
                 names.extend(retries)
                 _atomic_write(packages_path, "".join(f"{name}\n" for name in names).encode())
-            index += len(batch_names)
             LOG.info(
                 "npm snapshot %s: batch %d complete, %d/%d packages, queue=%d, %d versions, %d requirements",
                 self.dataset_id,
