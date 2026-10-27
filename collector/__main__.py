@@ -154,6 +154,18 @@ def _build_parser() -> argparse.ArgumentParser:
     pilot.add_argument("--registry-url", default=os.environ.get("NPM_REGISTRY_URL", "https://registry.npmjs.org"), help="npm Registry base URL")
     pilot.add_argument("--depsdev-api-url", default=os.environ.get("DEPSDEV_API_URL", DEPSDEV_API_URL), help="deps.dev API base URL")
     pilot.add_argument("--osv-api-url", default=os.environ.get("OSV_API_URL", "https://api.osv.dev"), help="OSV API base URL")
+
+    npm_snapshot = sources.add_parser("npm-snapshot", help="stream a compact npm-only snapshot for large analyses")
+    npm_snapshot.add_argument("--dataset-id", type=_dataset_id, default="full-v1", help="immutable dataset identifier")
+    npm_snapshot.add_argument("--package-limit", type=_non_negative_int, default=0, help="successful packages required; 0 means the complete search result")
+    npm_snapshot.add_argument("--batch-size", type=_positive_int, default=50, help="packages per compacted batch")
+    npm_snapshot.add_argument("--workers", type=_positive_int, default=8, help="concurrent npm requests")
+    npm_snapshot.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds")
+    npm_snapshot.add_argument("--retries", type=_non_negative_int, default=3, help="retries after temporary failures")
+    npm_snapshot.add_argument("--query", default=os.environ.get("NPM_SEARCH_QUERY", DEFAULT_QUERY), help="npm search query")
+    npm_snapshot.add_argument("--packages-file", type=Path, help="optional frozen package list instead of search discovery")
+    npm_snapshot.add_argument("--data-root", type=Path, default=Path(os.environ.get("BIGDATA_DATA_DIR", "data")), help="root containing landing/ and datasets/")
+    npm_snapshot.add_argument("--registry-url", default=os.environ.get("NPM_REGISTRY_URL", "https://registry.npmjs.org"), help="npm Registry base URL")
     return parser
 
 
@@ -231,6 +243,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             osv_api_url=args.osv_api_url,
         ).run()
         success = summary.criteria_met
+    elif args.source == "npm-snapshot":
+        from collector.npm_snapshot.collector import NpmSnapshotCollector
+        package_names = None
+        if args.packages_file is not None:
+            package_names = _package_names([], args.packages_file)
+        summary = NpmSnapshotCollector(
+            data_root=args.data_root,
+            dataset_id=args.dataset_id,
+            package_limit=args.package_limit,
+            batch_size=args.batch_size,
+            workers=args.workers,
+            query=args.query,
+            registry_url=args.registry_url,
+            timeout=args.timeout,
+            retries=args.retries,
+        ).run(package_names=package_names)
+        success = summary.status == "complete"
     else:
         raise AssertionError("argparse accepted an unsupported source")
     output = summary.to_dict()

@@ -74,6 +74,8 @@ def states(dataset, manifest, source):
         if state.get("http_status") != 200:
             raise ValueError(f"non-successful state: {name}")
         result[path] = state
+    if not result and not manifest["shards"]["raw"].get(source) and not manifest["shards"]["audit"].get(source):
+        return result
     if not result:
         raise ValueError(f"no successful {source} states")
     if source == "depsdev" and any("retrieved_at" not in state for state in result.values()):
