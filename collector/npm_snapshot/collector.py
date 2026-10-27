@@ -257,23 +257,40 @@ class NpmSnapshotCollector:
         return SnapshotSummary(**manifest["summary"])
 
     def _discover(self, packages_path: Path) -> List[str]:
-        names: List[str] = []
-        seen = set()
-        offset = 0
-        page = 0
         discovery_dir = self.work_dir / "discovery"
         discovery_dir.mkdir(parents=True, exist_ok=True)
-        while not self.package_limit or len(names) < self.package_limit:
-            query = urllib.parse.urlencode({"text": self.query, "size": 250, "from": offset})
-            url = f"{self.registry_url}/-/v1/search?{query}"
-            response = self.client.get(url)
-            _atomic_write(discovery_dir / f"part-{page:05d}.json", response.body)
-            document = _safe_json_object(response.body, url)
+        first = self._search_page(discovery_dir, 0, 0)
+        objects = first.get("objects")
+        if not isinstance(objects, list):
+            raise ValueError("npm search response has no objects")
+        total = first.get("total")
+        if not isinstance(total, int) or total < 0:
+            raise ValueError("npm search response has no valid total")
+        target = min(total, self.package_limit) if self.package_limit else total
+        page_count = (target + 249) // 250
+        pages: Dict[int, Mapping[str, Any]] = {0: first}
+        LOG.info("npm discovery: %d search results across %d pages", target, page_count)
+        if page_count > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as executor:
+                futures = {
+                    executor.submit(self._search_page, discovery_dir, page, page * 250): page
+                    for page in range(1, page_count)
+                }
+                completed = 1
+                for future in concurrent.futures.as_completed(futures):
+                    page = futures[future]
+                    pages[page] = future.result()
+                    completed += 1
+                    if completed % 20 == 0 or completed == page_count:
+                        LOG.info("npm discovery: %d/%d pages", completed, page_count)
+
+        names: List[str] = []
+        seen = set()
+        for page in range(page_count):
+            document = pages[page]
             objects = document.get("objects")
             if not isinstance(objects, list):
                 raise ValueError("npm search response has no objects")
-            if not objects:
-                break
             for item in objects:
                 package = item.get("package") if isinstance(item, dict) else None
                 name = package.get("name") if isinstance(package, dict) else None
@@ -282,14 +299,21 @@ class NpmSnapshotCollector:
                     names.append(name)
                     if self.package_limit and len(names) == self.package_limit:
                         break
-            offset += len(objects)
-            page += 1
-            total = document.get("total")
-            if isinstance(total, int) and offset >= total:
+            if self.package_limit and len(names) == self.package_limit:
                 break
         _atomic_write(packages_path, "".join(f"{name}\n" for name in names).encode())
         self._compact_discovery(discovery_dir)
         return names
+
+    def _search_page(self, directory: Path, page: int, offset: int) -> Mapping[str, Any]:
+        cached = directory / f"part-{page:05d}.json"
+        if cached.is_file():
+            return _safe_json_object(cached.read_bytes(), cached.as_posix())
+        query = urllib.parse.urlencode({"text": self.query, "size": 250, "from": offset})
+        url = f"{self.registry_url}/-/v1/search?{query}"
+        response = self.client.get(url)
+        _atomic_write(cached, response.body)
+        return _safe_json_object(response.body, url)
 
     def _compact_discovery(self, directory: Path) -> None:
         destination = self.build_dir / "raw" / "npm" / "part-search.tar.gz"
