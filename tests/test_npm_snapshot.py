@@ -42,6 +42,24 @@ class FakeClient:
 
 
 class NpmSnapshotCollectorTest(unittest.TestCase):
+    def test_dependency_expansion_reaches_success_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "data"
+            base = "https://registry.example"
+            client = FakeClient({
+                f"{base}/app": HttpResponse(f"{base}/app", 200, packument("app", "lib"), {}),
+                f"{base}/lib": HttpResponse(f"{base}/lib", 200, packument("lib", "app"), {}),
+            })
+            summary = NpmSnapshotCollector(
+                root, "closure-test", package_limit=2, batch_size=1, workers=1,
+                registry_url=base, expand_dependencies=True, client=client,
+            ).run(package_names=["app"])
+            self.assertEqual((summary.status, summary.packages, summary.package_target),
+                             ("complete", 2, 2))
+            self.assertEqual(client.calls, [f"{base}/app", f"{base}/lib"])
+            frozen = (root / "datasets/closure-test/inputs/packages.txt").read_text().splitlines()
+            self.assertEqual(frozen, ["app", "lib"])
+
     def test_streaming_batches_normalize_and_resume(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "data"

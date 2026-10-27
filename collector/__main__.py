@@ -164,6 +164,7 @@ def _build_parser() -> argparse.ArgumentParser:
     npm_snapshot.add_argument("--retries", type=_non_negative_int, default=3, help="retries after temporary failures")
     npm_snapshot.add_argument("--query", default=os.environ.get("NPM_SEARCH_QUERY", DEFAULT_QUERY), help="npm search query")
     npm_snapshot.add_argument("--packages-file", type=Path, help="optional frozen package list instead of search discovery")
+    npm_snapshot.add_argument("--expand-dependencies", action="store_true", help="expand seed packages through declared production dependencies until the package target")
     npm_snapshot.add_argument("--data-root", type=Path, default=Path(os.environ.get("BIGDATA_DATA_DIR", "data")), help="root containing landing/ and datasets/")
     npm_snapshot.add_argument("--registry-url", default=os.environ.get("NPM_REGISTRY_URL", "https://registry.npmjs.org"), help="npm Registry base URL")
     return parser
@@ -258,6 +259,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             registry_url=args.registry_url,
             timeout=args.timeout,
             retries=args.retries,
+            expand_dependencies=args.expand_dependencies,
         ).run(package_names=package_names)
         success = summary.status == "complete"
     else:

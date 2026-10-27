@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from collector.npm.collector import (
     DEFAULT_QUERY,
+    FetchError,
     HttpClient,
     HttpResponse,
     _safe_json_object,
@@ -41,6 +42,7 @@ class FetchedPackage:
     versions: int
     requirements: int
     warnings: int
+    dependency_names: Tuple[str, ...]
 
 
 @dataclasses.dataclass
@@ -137,6 +139,7 @@ class NpmSnapshotCollector:
         registry_url: str = "https://registry.npmjs.org",
         timeout: float = 30.0,
         retries: int = 3,
+        expand_dependencies: bool = False,
         client: Optional[HttpClient] = None,
     ):
         if package_limit < 0 or batch_size < 1 or workers < 1:
@@ -148,6 +151,7 @@ class NpmSnapshotCollector:
         self.workers = workers
         self.query = query
         self.registry_url = registry_url.rstrip("/")
+        self.expand_dependencies = expand_dependencies
         self.client = client or HttpClient(timeout=timeout, retries=retries)
         self.parser_version = parser_version()
         self.work_dir = self.data_root / "landing" / f".{dataset_id}-npm-snapshot"
@@ -164,6 +168,7 @@ class NpmSnapshotCollector:
             "registry_url": self.registry_url,
             "parser_version": self.parser_version,
             "sources": ["npm"],
+            "expand_dependencies": self.expand_dependencies,
         }
 
     def run(self, package_names: Optional[Sequence[str]] = None) -> SnapshotSummary:
@@ -184,16 +189,20 @@ class NpmSnapshotCollector:
             names = self._discover(packages_path)
         if not names:
             raise ValueError("npm discovery returned no packages")
-        if self.package_limit and len(names) != self.package_limit:
+        if self.package_limit and not self.expand_dependencies and len(names) != self.package_limit:
             raise ValueError(f"discovered {len(names)} packages, expected {self.package_limit}")
 
-        summary = SnapshotSummary(self.dataset_id, "collecting", len(names))
+        target = self.package_limit if self.expand_dependencies and self.package_limit else len(names)
+        summary = SnapshotSummary(self.dataset_id, "collecting", target)
         all_batch_records = []
-        batch_count = (len(names) + self.batch_size - 1) // self.batch_size
-        LOG.info("npm snapshot %s: %d packages in %d batches", self.dataset_id, len(names), batch_count)
-        for index in range(0, len(names), self.batch_size):
-            number = index // self.batch_size
-            batch_names = names[index:index + self.batch_size]
+        seen = set(names)
+        index = 0
+        LOG.info("npm snapshot %s: %d seed packages, target %d successful packages",
+                 self.dataset_id, len(names), target)
+        while index < len(names) and summary.packages < target:
+            number = len(all_batch_records)
+            remaining = target - summary.packages
+            batch_names = names[index:index + min(self.batch_size, remaining)]
             record = self._batch(number, batch_names)
             all_batch_records.append(record)
             summary.batches += 1
@@ -203,18 +212,24 @@ class NpmSnapshotCollector:
             summary.failed += len(record["failures"])
             summary.warnings += record["warnings"]
             summary.raw_bytes += record["raw"]["input_bytes"]
+            if self.expand_dependencies:
+                additions = [name for name in record["discovered_dependencies"] if name not in seen]
+                seen.update(additions)
+                names.extend(additions)
+                _atomic_write(packages_path, "".join(f"{name}\n" for name in names).encode())
+            index += len(batch_names)
             LOG.info(
-                "npm snapshot %s: batch %d/%d complete, %d/%d packages, %d versions, %d requirements",
+                "npm snapshot %s: batch %d complete, %d/%d packages, queue=%d, %d versions, %d requirements",
                 self.dataset_id,
                 number + 1,
-                batch_count,
                 summary.packages,
                 summary.package_target,
+                len(names) - index,
                 summary.package_versions,
                 summary.dependency_requirements,
             )
 
-        summary.status = "complete" if summary.failed == 0 and summary.packages == summary.package_target else "incomplete"
+        summary.status = "complete" if summary.packages >= summary.package_target else "incomplete"
         if summary.status != "complete":
             raise RuntimeError(f"snapshot incomplete: {summary.failed} package failures; rerun to retry failed batches")
         inputs = self.build_dir / "inputs"
@@ -368,13 +383,17 @@ class NpmSnapshotCollector:
         if package["package_name"] != name:
             raise ValueError(f"npm identity mismatch: requested {name}, received {package['package_name']}")
         return FetchedPackage(name, package["package_name"], response, retrieved_at, snapshot_id,
-                              len(versions), len(requirements), len(warnings))
+                              len(versions), len(requirements), len(warnings),
+                              tuple(sorted({item["dependency_name"] for item in requirements
+                                            if item["dependency_type"] == "dependencies"})))
 
     def _batch(self, number: int, names: Sequence[str]) -> Dict[str, Any]:
         state_path = self.work_dir / "batches" / f"part-{number:05d}.json"
         if state_path.is_file():
             record = json.loads(state_path.read_text(encoding="utf-8"))
-            if record.get("names") == list(names) and not record.get("failures"):
+            reusable_failures = all(item.get("terminal") for item in record.get("failures", []))
+            has_expansion = not self.expand_dependencies or "discovered_dependencies" in record
+            if record.get("names") == list(names) and reusable_failures and has_expansion:
                 self._verify_record(record)
                 return record
         raw_destination = self.build_dir / "raw" / "npm" / f"part-{number:05d}.tar.gz"
@@ -393,10 +412,13 @@ class NpmSnapshotCollector:
                 try:
                     fetched[name] = future.result()
                 except Exception as exc:
-                    failures.append({"package": name, "error_type": type(exc).__name__, "error": str(exc)})
+                    terminal = isinstance(exc, FetchError) and exc.status in {403, 404, 410}
+                    failures.append({"package": name, "error_type": type(exc).__name__,
+                                     "error": str(exc), "terminal": terminal})
         raw_handles = _tar_writer(raw_temporary)
         audit_handles = _tar_writer(audit_temporary)
         versions = requirements = warnings = raw_bytes = 0
+        discovered_dependencies = set()
         try:
             for name in names:
                 item = fetched.get(name)
@@ -424,6 +446,7 @@ class NpmSnapshotCollector:
                 requirements += item.requirements
                 warnings += item.warnings
                 raw_bytes += len(item.response.body)
+                discovered_dependencies.update(item.dependency_names)
         finally:
             _close_tar(raw_handles)
             _close_tar(audit_handles)
@@ -438,11 +461,12 @@ class NpmSnapshotCollector:
             "requirements": requirements,
             "warnings": warnings,
             "failures": sorted(failures, key=lambda value: value["package"]),
+            "discovered_dependencies": sorted(discovered_dependencies),
             "raw": self._shard_record(raw_destination, len(fetched), raw_bytes),
             "audit": self._shard_record(audit_destination, len(fetched), None),
         }
         _atomic_write(state_path, _json_bytes(record, pretty=True))
-        if failures:
+        if failures and (not self.expand_dependencies or any(not item["terminal"] for item in failures)):
             # A failed batch is deliberately retried in full on the next run.
             raise RuntimeError(f"batch {number} failed for {len(failures)} packages")
         return record
