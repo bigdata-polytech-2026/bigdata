@@ -109,7 +109,9 @@ def _tar_add_bytes(archive: tarfile.TarFile, name: str, payload: bytes) -> None:
 
 def _tar_writer(path: Path):
     raw = path.open("xb")
-    compressed = gzip.GzipFile(filename="", mode="wb", compresslevel=6, fileobj=raw, mtime=0)
+    # Registry JSON compresses well even at level 1; the lower CPU cost matters for
+    # tens of thousands of packuments and keeps the collector network-bound.
+    compressed = gzip.GzipFile(filename="", mode="wb", compresslevel=1, fileobj=raw, mtime=0)
     archive = tarfile.open(fileobj=compressed, mode="w|")
     return raw, compressed, archive
 
