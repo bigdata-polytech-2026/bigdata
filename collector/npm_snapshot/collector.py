@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import collections
 import dataclasses
 import datetime as dt
 import gzip
@@ -196,6 +197,7 @@ class NpmSnapshotCollector:
         summary = SnapshotSummary(self.dataset_id, "collecting", target)
         all_batch_records = []
         seen = set(names)
+        attempts = collections.Counter(names)
         index = 0
         LOG.info("npm snapshot %s: %d seed packages, target %d successful packages",
                  self.dataset_id, len(names), target)
@@ -216,6 +218,14 @@ class NpmSnapshotCollector:
                 additions = [name for name in record["discovered_dependencies"] if name not in seen]
                 seen.update(additions)
                 names.extend(additions)
+                attempts.update(additions)
+                retries = []
+                for failure in record["failures"]:
+                    name = failure["package"]
+                    if not failure["terminal"] and attempts[name] < 3:
+                        retries.append(name)
+                        attempts[name] += 1
+                names.extend(retries)
                 _atomic_write(packages_path, "".join(f"{name}\n" for name in names).encode())
             index += len(batch_names)
             LOG.info(
@@ -235,6 +245,8 @@ class NpmSnapshotCollector:
         inputs = self.build_dir / "inputs"
         inputs.mkdir(parents=True, exist_ok=True)
         _atomic_write(inputs / "packages.txt", packages_path.read_bytes())
+        failures = [failure for record in all_batch_records for failure in record["failures"]]
+        _atomic_write(inputs / "failures.json", _json_bytes(failures, pretty=True))
         raw_shards = [record["raw"] for record in all_batch_records]
         discovery = self._discovery_record()
         if discovery is not None:
@@ -247,6 +259,10 @@ class NpmSnapshotCollector:
             "immutable": True,
             "config": self._config(),
             "summary": summary.to_dict(),
+            "inputs": {
+                "packages": self._input_record(inputs / "packages.txt"),
+                "failures": self._input_record(inputs / "failures.json"),
+            },
             "shards": {
                 "raw": {"npm": raw_shards, "depsdev": []},
                 "audit": {"npm": audit_shards, "depsdev": []},
@@ -391,7 +407,7 @@ class NpmSnapshotCollector:
         state_path = self.work_dir / "batches" / f"part-{number:05d}.json"
         if state_path.is_file():
             record = json.loads(state_path.read_text(encoding="utf-8"))
-            reusable_failures = all(item.get("terminal") for item in record.get("failures", []))
+            reusable_failures = self.expand_dependencies or all(item.get("terminal") for item in record.get("failures", []))
             has_expansion = not self.expand_dependencies or "discovered_dependencies" in record
             if record.get("names") == list(names) and reusable_failures and has_expansion:
                 self._verify_record(record)
@@ -466,7 +482,7 @@ class NpmSnapshotCollector:
             "audit": self._shard_record(audit_destination, len(fetched), None),
         }
         _atomic_write(state_path, _json_bytes(record, pretty=True))
-        if failures and (not self.expand_dependencies or any(not item["terminal"] for item in failures)):
+        if failures and not self.expand_dependencies:
             # A failed batch is deliberately retried in full on the next run.
             raise RuntimeError(f"batch {number} failed for {len(failures)} packages")
         return record
@@ -482,6 +498,10 @@ class NpmSnapshotCollector:
             result["input_bytes"] = input_bytes
         return result
 
+    def _input_record(self, path: Path) -> Dict[str, Any]:
+        return {"path": path.relative_to(self.build_dir).as_posix(), "sha256": _digest(path),
+                "bytes": path.stat().st_size}
+
     def _verify_record(self, record: Mapping[str, Any]) -> None:
         for key in ("raw", "audit"):
             shard = record[key]
@@ -490,6 +510,10 @@ class NpmSnapshotCollector:
                 raise ValueError(f"corrupt batch shard: {path}")
 
     def _validate_snapshot(self, root: Path, manifest: Mapping[str, Any]) -> None:
+        for record in manifest.get("inputs", {}).values():
+            path = root / record["path"]
+            if not path.is_file() or path.stat().st_size != record["bytes"] or _digest(path) != record["sha256"]:
+                raise ValueError(f"snapshot input verification failed: {path}")
         for group in ("raw", "audit"):
             for shards in manifest["shards"][group].values():
                 for shard in shards:

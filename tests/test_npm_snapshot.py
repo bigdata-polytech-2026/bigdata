@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from collector.npm.collector import HttpResponse
+from collector.npm.collector import FetchError, HttpResponse
 from collector.npm_snapshot.collector import NpmSnapshotCollector
 from processing.normalization.pipeline import run as normalize
 
@@ -41,7 +41,33 @@ class FakeClient:
         return self.responses[url]
 
 
+class FlakyClient:
+    def __init__(self, response):
+        self.response = response
+        self.calls = 0
+
+    def get(self, url):
+        self.calls += 1
+        if self.calls == 1:
+            raise FetchError(url, "temporary network failure")
+        return self.response
+
+
 class NpmSnapshotCollectorTest(unittest.TestCase):
+    def test_dependency_expansion_requeues_transient_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "data"
+            base = "https://registry.example"
+            client = FlakyClient(HttpResponse(f"{base}/app", 200, packument("app", "app"), {}))
+            summary = NpmSnapshotCollector(
+                root, "retry-test", package_limit=1, batch_size=1, workers=1,
+                registry_url=base, expand_dependencies=True, client=client,
+            ).run(package_names=["app"])
+            self.assertEqual((summary.status, summary.packages, summary.failed), ("complete", 1, 1))
+            self.assertEqual(client.calls, 2)
+            failures = json.loads((root / "datasets/retry-test/inputs/failures.json").read_text())
+            self.assertEqual(failures[0]["package"], "app")
+
     def test_dependency_expansion_reaches_success_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "data"
