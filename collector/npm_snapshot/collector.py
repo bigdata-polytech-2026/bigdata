@@ -254,12 +254,13 @@ class NpmSnapshotCollector:
         seen = set(names)
         attempts = collections.Counter(names)
         existing_states = sorted((self.work_dir / "batches").glob("part-*.json"))
-        completed = set()
+        known_successes = set()
         if self.expand_dependencies:
             for path in existing_states:
                 record = json.loads(path.read_text(encoding="utf-8"))
                 failed_names = {item["package"] for item in record.get("failures", [])}
-                completed.update(name for name in record.get("names", []) if name not in failed_names)
+                known_successes.update(name for name in record.get("names", []) if name not in failed_names)
+        completed = set()
         counted_successes = set()
         index = 0
         LOG.info("npm snapshot %s: %d seed packages, target %d successful packages",
@@ -270,10 +271,16 @@ class NpmSnapshotCollector:
             limit = min(self.batch_size, remaining)
             if number < len(existing_states):
                 saved = json.loads(existing_states[number].read_text(encoding="utf-8"))
-                batch_names = names[index:index + len(saved["names"])]
-                if batch_names != saved["names"]:
-                    raise ValueError(f"saved batch {number} no longer matches the frozen package queue")
-                index += len(batch_names)
+                batch_names = []
+                for expected in saved["names"]:
+                    while index < len(names) and names[index] != expected:
+                        if names[index] not in completed:
+                            raise ValueError(f"saved batch {number} no longer matches the frozen package queue")
+                        index += 1
+                    if index == len(names):
+                        raise ValueError(f"saved batch {number} is missing from the frozen package queue")
+                    batch_names.append(names[index])
+                    index += 1
             else:
                 batch_names = []
                 while index < len(names) and len(batch_names) < limit:
@@ -305,7 +312,7 @@ class NpmSnapshotCollector:
                 retries = []
                 for failure in record["failures"]:
                     name = failure["package"]
-                    if (not failure["terminal"] and name not in completed
+                    if (not failure["terminal"] and name not in completed and name not in known_successes
                             and attempts[name] < MAX_PACKAGE_ATTEMPTS):
                         retries.append(name)
                         attempts[name] += 1
