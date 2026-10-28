@@ -193,9 +193,17 @@ def _check(db, checks: dict[str, int], name: str, query: str) -> None:
 
 def _build(staging: Path, input_dir: Path, version: str, duckdb, pa, pq) -> dict:
     db = duckdb.connect()
-    db.execute("SET memory_limit='1GB'")
-    db.execute("SET threads=4")
+    # Full-v1 joins tens of millions of declarations with calculator output.
+    # Keep enough buffer-pool headroom for the compressed COPY while retaining
+    # an on-disk spill directory for larger-than-memory operators.
+    db.execute("SET memory_limit='4GB'")
+    db.execute("SET threads=2")
+    db.execute("SET preserve_insertion_order=false")
     db.execute(f"SET temp_directory={_sql_string(staging / '.spill')}")
+    # DuckDB derives this guard once, when the connection is opened.  The
+    # calculator's transient JSONL files are removed before the large join, so
+    # the later free space can legitimately exceed that initial estimate.
+    db.execute("SET max_temp_directory_size='40GB'")
     checks: dict[str, int] = {}
     key_sql = ", ".join(KEYS)
     join_sql = " AND ".join(f"i.{key}=c.{key}" for key in KEYS)
@@ -230,6 +238,12 @@ def _build(staging: Path, input_dir: Path, version: str, duckdb, pa, pq) -> dict
             raise ValueError(f"calculator row accounting mismatch: sent {evaluated}, received {calculated_rows}")
         if diagnostics_rows != history_packages:
             raise ValueError(f"history diagnostics mismatch: {history_packages} histories, {diagnostics_rows} rows")
+        # The JSONL exchange is no longer needed once both Parquet files have
+        # been closed.  Releasing it here avoids carrying several gigabytes of
+        # dead staging data through the much larger final join.
+        for path in (staging / ".histories.jsonl", staging / ".diagnostics.jsonl",
+                     staging / ".results.jsonl", staging / ".calculator.stderr"):
+            path.unlink(missing_ok=True)
         db.execute(f"CREATE VIEW calculated AS SELECT * FROM read_parquet({_sql_string(staging / '.calculated.parquet')})")
         expected_evaluated = db.execute(f"SELECT count(*) FROM lag_inputs WHERE {candidate_filter}").fetchone()[0]
         if evaluated != expected_evaluated:

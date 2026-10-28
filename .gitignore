@@ -25,7 +25,10 @@ data/**
 /raw/
 /normalized/
 /results/
-/artifacts/
+/artifacts/**
+!/artifacts/**/
+!/artifacts/**/*.dvc
+!/artifacts/**/.gitignore
 *.parquet
 *.arrow
 *.duckdb
