@@ -12,7 +12,10 @@ import logging
 import os
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -23,6 +26,7 @@ from collector.npm.collector import (
     HttpClient,
     HttpResponse,
     _safe_json_object,
+    _retry_delay,
     normalize_packument,
     parser_version,
     utc_now,
@@ -32,6 +36,51 @@ from collector.npm.collector import (
 SNAPSHOT_VERSION = "1.0.0"
 MAX_PACKAGE_ATTEMPTS = 5
 LOG = logging.getLogger(__name__)
+
+
+class SnapshotHttpClient(HttpClient):
+    """HTTP client with an absolute per-attempt deadline for pathological packuments."""
+
+    def __init__(self, timeout: float, retries: int):
+        super().__init__(timeout=timeout, retries=retries)
+        self.total_timeout = max(60.0, timeout * 2)
+
+    def get(self, url: str) -> HttpResponse:
+        last_error: Optional[BaseException] = None
+        for attempt in range(self.retries + 1):
+            request = urllib.request.Request(
+                url,
+                headers={"Accept": "application/json", "User-Agent": self.user_agent},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    deadline = time.monotonic() + self.total_timeout
+                    chunks = []
+                    while True:
+                        block = response.read(64 * 1024)
+                        if not block:
+                            break
+                        chunks.append(block)
+                        if time.monotonic() > deadline:
+                            raise TimeoutError(f"absolute download deadline exceeded for {url}")
+                    return HttpResponse(
+                        url=response.geturl(), status=response.status, body=b"".join(chunks),
+                        headers={key.lower(): value for key, value in response.headers.items()},
+                    )
+            except urllib.error.HTTPError as exc:
+                last_error = exc
+                retryable = exc.code == 429 or 500 <= exc.code <= 599
+                if not retryable or attempt == self.retries:
+                    raise FetchError(url, f"HTTP {exc.code} for {url}", status=exc.code) from exc
+                delay = _retry_delay(attempt, exc.headers.get("Retry-After"))
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                last_error = exc
+                if attempt == self.retries:
+                    raise FetchError(url, f"request failed for {url}: {exc}") from exc
+                delay = _retry_delay(attempt, None)
+            time.sleep(delay)
+        raise FetchError(url, f"request failed for {url}: {last_error}")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -156,7 +205,7 @@ class NpmSnapshotCollector:
         self.query = query
         self.registry_url = registry_url.rstrip("/")
         self.expand_dependencies = expand_dependencies
-        self.client = client or HttpClient(timeout=timeout, retries=retries)
+        self.client = client or SnapshotHttpClient(timeout=timeout, retries=retries)
         self.parser_version = parser_version()
         self.work_dir = self.data_root / "landing" / f".{dataset_id}-npm-snapshot"
         self.build_dir = self.work_dir / "snapshot"
