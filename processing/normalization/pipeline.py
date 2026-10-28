@@ -213,8 +213,12 @@ def sql_string(value):
 
 def analyze(directory, duckdb):
     db = duckdb.connect()
-    db.execute("SET memory_limit='1GB'")
+    # The full snapshot contains tens of millions of declarations.  A 1 GiB
+    # cap leaves DuckDB no room for the final compressed COPY after its joins
+    # have filled the buffer pool, even though the operators can spill.
+    db.execute("SET memory_limit='3GB'")
     db.execute("SET threads=4")
+    db.execute("SET preserve_insertion_order=false")
     db.execute(f"SET temp_directory={sql_string(directory / 'spill')}")
     checks = {}
 

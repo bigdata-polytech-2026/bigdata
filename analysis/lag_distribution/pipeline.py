@@ -211,7 +211,7 @@ def run(dataset_id: str, normalized_dir: Path, lag_dir: Path, output_dir: Path,
         db.close()
         finalize_directory(staging, output_dir)
         return result
-    except Exception:
+    except BaseException:
         db.close()
         cleanup_directory(staging)
         raise

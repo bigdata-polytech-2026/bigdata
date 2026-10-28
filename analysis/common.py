@@ -162,11 +162,14 @@ def spearman_with_bootstrap(x, y, clusters, repetitions: int, seed: int) -> dict
     clusters = np.asarray(clusters)
     mask = np.isfinite(x) & np.isfinite(y)
     x, y, clusters = x[mask], y[mask], clusters[mask]
-    unique = np.unique(clusters)
+    unique, inverse = np.unique(clusters, return_inverse=True)
     # Associations are estimated at consumer-package level. This prevents packages
     # with many historical releases from dominating both the estimate and bootstrap.
-    package_x = np.asarray([np.mean(x[clusters == key]) for key in unique])
-    package_y = np.asarray([np.mean(y[clusters == key]) for key in unique])
+    # Aggregate all packages in one pass. Re-scanning the full observation array
+    # once per package is quadratic and is prohibitive for full-v1.
+    counts = np.bincount(inverse)
+    package_x = np.bincount(inverse, weights=x) / counts
+    package_y = np.bincount(inverse, weights=y) / counts
     rho, p_value = spearmanr(package_x, package_y)
     estimates = []
     if repetitions and unique.size > 1:

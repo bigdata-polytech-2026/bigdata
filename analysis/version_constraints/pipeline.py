@@ -181,13 +181,13 @@ def _age_gradient(db) -> list[tuple[Any, ...]]:
     bread = np.linalg.pinv((x * root_w[:, None]).T @ (x * root_w[:, None]))
     beta = bread @ ((x * w[:, None]).T @ y)
     residual = y - x @ beta
-    meat = np.zeros((x.shape[1], x.shape[1]))
     clusters_array = np.asarray(clusters)
-    unique = np.unique(clusters_array)
-    for cluster in unique:
-        mask = clusters_array == cluster
-        score = x[mask].T @ (w[mask] * residual[mask])
-        meat += np.outer(score, score)
+    unique, inverse = np.unique(clusters_array, return_inverse=True)
+    # Accumulate package-level score vectors in one pass. Re-scanning every
+    # package-version cell once per package is quadratic on full-v1.
+    scores = np.zeros((unique.size, x.shape[1]))
+    np.add.at(scores, inverse, x * (w * residual)[:, None])
+    meat = scores.T @ scores
     covariance = bread @ meat @ bread
     if unique.size > 1 and x.shape[0] > x.shape[1]:
         covariance *= (unique.size / (unique.size - 1)) * ((x.shape[0] - 1) / (x.shape[0] - x.shape[1]))
@@ -358,5 +358,5 @@ def run(dataset_id: str, normalized_dir: Path, lag_dir: Path, output_dir: Path,
         write_json(staging / "analysis-manifest.json", result)
         db.close(); finalize_directory(staging, output_dir)
         return result
-    except Exception:
+    except BaseException:
         db.close(); cleanup_directory(staging); raise
