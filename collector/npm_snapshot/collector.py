@@ -43,7 +43,7 @@ class SnapshotHttpClient(HttpClient):
 
     def __init__(self, timeout: float, retries: int):
         super().__init__(timeout=timeout, retries=retries)
-        self.total_timeout = max(60.0, timeout * 2)
+        self.total_timeout = max(20.0, timeout * 2)
 
     def get(self, url: str) -> HttpResponse:
         last_error: Optional[BaseException] = None
