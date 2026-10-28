@@ -10,6 +10,7 @@ import io
 import json
 import logging
 import os
+import string
 import tarfile
 import tempfile
 import time
@@ -35,6 +36,7 @@ from collector.npm.collector import (
 
 SNAPSHOT_VERSION = "1.0.0"
 MAX_PACKAGE_ATTEMPTS = 5
+REGISTRY_INDEX_URL = "https://replicate.npmjs.com/registry/_all_docs"
 LOG = logging.getLogger(__name__)
 
 
@@ -225,6 +227,7 @@ class NpmSnapshotCollector:
             "parser_version": self.parser_version,
             "sources": ["npm"],
             "expand_dependencies": self.expand_dependencies,
+            "registry_index_url": REGISTRY_INDEX_URL if self.expand_dependencies else None,
         }
 
     def run(self, package_names: Optional[Sequence[str]] = None) -> SnapshotSummary:
@@ -265,7 +268,16 @@ class NpmSnapshotCollector:
         index = 0
         LOG.info("npm snapshot %s: %d seed packages, target %d successful packages",
                  self.dataset_id, len(names), target)
-        while index < len(names) and summary.packages < target:
+        while summary.packages < target:
+            if index >= len(names):
+                additions = self._fill_from_registry_index(seen, target - summary.packages)
+                if not additions:
+                    break
+                seen.update(additions)
+                names.extend(additions)
+                attempts.update(additions)
+                _atomic_write(packages_path, "".join(f"{name}\n" for name in names).encode())
+                self._compact_registry_index()
             number = len(all_batch_records)
             remaining = target - summary.packages
             limit = min(self.batch_size, remaining)
@@ -341,6 +353,9 @@ class NpmSnapshotCollector:
         discovery = self._discovery_record()
         if discovery is not None:
             raw_shards.insert(0, discovery)
+        registry_index = self._registry_index_record()
+        if registry_index is not None:
+            raw_shards.insert(1 if discovery is not None else 0, registry_index)
         audit_shards = [record["audit"] for record in all_batch_records]
         summary.snapshot_bytes = sum(item["compressed_bytes"] for item in raw_shards + audit_shards)
         manifest = {
@@ -463,6 +478,80 @@ class NpmSnapshotCollector:
 
     def _discovery_record(self) -> Optional[Dict[str, Any]]:
         path = self.build_dir / "raw" / "npm" / "part-search.tar.gz"
+        if not path.is_file():
+            return None
+        with tarfile.open(path, "r:gz") as archive:
+            members = [member for member in archive if member.isfile()]
+        return self._shard_record(path, len(members), sum(member.size for member in members))
+
+    def _fill_from_registry_index(self, seen: set[str], needed: int) -> List[str]:
+        destination = self.build_dir / "raw" / "npm" / "part-registry-index.tar.gz"
+        if destination.is_file():
+            return []
+        directory = self.work_dir / "registry-index"
+        directory.mkdir(parents=True, exist_ok=True)
+        prefixes = [f"@{value}" for value in string.ascii_lowercase]
+        prefixes += list(string.ascii_lowercase + string.digits)
+        pages: Dict[int, Mapping[str, Any]] = {}
+        LOG.info("npm registry index: collecting %d prefix strata", len(prefixes))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(self.workers, 8)) as executor:
+            futures = {
+                executor.submit(self._registry_index_page, directory, number, prefix): number
+                for number, prefix in enumerate(prefixes)
+            }
+            for future in concurrent.futures.as_completed(futures):
+                number = futures[future]
+                pages[number] = future.result()
+        additions = []
+        desired = max(needed * 2, 20_000)
+        for number in range(len(prefixes)):
+            rows = pages[number].get("rows")
+            if not isinstance(rows, list):
+                raise ValueError("npm registry index response has no rows")
+            for row in rows:
+                name = row.get("id") if isinstance(row, dict) else None
+                if isinstance(name, str) and not name.startswith("_design/") and name not in seen:
+                    additions.append(name)
+                    seen.add(name)
+                    if len(additions) >= desired:
+                        LOG.info("npm registry index: selected %d additional packages", len(additions))
+                        return additions
+        LOG.info("npm registry index: selected %d additional packages", len(additions))
+        return additions
+
+    def _registry_index_page(self, directory: Path, number: int, prefix: str) -> Mapping[str, Any]:
+        cached = directory / f"part-{number:05d}.json"
+        if cached.is_file():
+            return _safe_json_object(cached.read_bytes(), cached.as_posix())
+        query = urllib.parse.urlencode({
+            "limit": 1000,
+            "startkey": json.dumps(prefix),
+            "endkey": json.dumps(prefix + "\ufff0"),
+        })
+        url = f"{REGISTRY_INDEX_URL}?{query}"
+        response = self.client.get(url)
+        _atomic_write(cached, response.body)
+        return _safe_json_object(response.body, url)
+
+    def _compact_registry_index(self) -> None:
+        directory = self.work_dir / "registry-index"
+        if not directory.is_dir():
+            return
+        destination = self.build_dir / "raw" / "npm" / "part-registry-index.tar.gz"
+        temporary = destination.with_name(f".{destination.name}.tmp")
+        handles = _tar_writer(temporary)
+        try:
+            for path in sorted(directory.glob("*.json")):
+                _tar_add_bytes(handles[2], f"raw/npm-registry-index/{path.name}", path.read_bytes())
+        finally:
+            _close_tar(handles)
+        os.replace(temporary, destination)
+        for path in directory.glob("*.json"):
+            path.unlink()
+        directory.rmdir()
+
+    def _registry_index_record(self) -> Optional[Dict[str, Any]]:
+        path = self.build_dir / "raw" / "npm" / "part-registry-index.tar.gz"
         if not path.is_file():
             return None
         with tarfile.open(path, "r:gz") as archive:
