@@ -114,7 +114,7 @@ def raw_records(dataset, manifest, source, version):
     remaining = states(dataset, manifest, source)
     for path, payload in archive_records(dataset, manifest["shards"]["raw"][source]):
         # npm discovery responses are archived too; only active packuments have state markers.
-        if path.startswith("raw/npm-search/") and source == "npm":
+        if source == "npm" and path.startswith(("raw/npm-search/", "raw/npm-registry-index/")):
             continue
         state = remaining.pop(path, None)
         if state is None:
