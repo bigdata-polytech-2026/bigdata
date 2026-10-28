@@ -22,7 +22,8 @@ def run(root):
 
 class NormalizationTest(unittest.TestCase):
     def fixture(self, root, *, bad_hash=False, duplicate=False, bad_root=False,
-                legacy=False, legacy_provenance=True, empty_graph=False, extra_versions=False):
+                identical_duplicate=False, legacy=False, legacy_provenance=True,
+                empty_graph=False, extra_versions=False):
         root = root / "source"
         root.mkdir()
         manifest = {"shards": {"raw": {}, "audit": {}}}
@@ -41,7 +42,13 @@ class NormalizationTest(unittest.TestCase):
         graph = {"nodes": nodes, "edges": [{"fromNode": 0, "toNode": 1}, {"fromNode": 1, "toNode": 2}]}
         if empty_graph:
             graph["edges"] = []
-        for source, documents in (("npm", [app, lib] + ([app] if duplicate else [])), ("depsdev", [graph])):
+        npm_documents = [app, lib]
+        if duplicate or identical_duplicate:
+            duplicate_app = json.loads(json.dumps(app))
+            if duplicate:
+                duplicate_app["description"] = "conflicting snapshot"
+            npm_documents.append(duplicate_app)
+        for source, documents in (("npm", npm_documents), ("depsdev", [graph])):
             raw_entries, states = [], []
             for number, document in enumerate(documents):
                 snapshot = str(uuid.uuid4())
@@ -125,9 +132,17 @@ class NormalizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.fixture(root, duplicate=True)
-            with self.assertRaisesRegex(ValueError, "packages_duplicate_keys"):
+            with self.assertRaisesRegex(ValueError, "conflicting npm snapshots"):
                 run(root)
             self.assertFalse((root / "normalized/parquet").exists())
+
+    def test_identical_duplicate_snapshot_is_counted_and_skipped(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root, identical_duplicate=True)
+            report = run(root)
+            self.assertEqual(report["counts"]["packages"], 2)
+            self.assertEqual(report["raw_statistics"]["npm_duplicate_snapshots_skipped"], 1)
 
     def test_graph_identity_must_match_requested_root(self):
         with tempfile.TemporaryDirectory() as temporary:

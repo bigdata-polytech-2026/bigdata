@@ -110,8 +110,26 @@ def states(dataset, manifest, source):
     return result
 
 
-def raw_records(dataset, manifest, source, version):
+def raw_records(dataset, manifest, source, version, statistics=None):
     remaining = states(dataset, manifest, source)
+    inactive = set()
+    if source == "npm":
+        by_package = {}
+        for path, state in remaining.items():
+            package_name = state.get("package_name", state.get("requested_name"))
+            if not isinstance(package_name, str) or not package_name:
+                raise ValueError(f"npm state has no package identity: {path}")
+            by_package.setdefault(package_name, []).append((path, state))
+        for package_name, candidates in by_package.items():
+            if len(candidates) == 1:
+                continue
+            hashes = {state["raw_sha256"] for _, state in candidates}
+            if len(hashes) != 1:
+                raise ValueError(f"conflicting npm snapshots for package: {package_name}")
+            selected = min(candidates, key=lambda item: (item[1]["retrieved_at"], item[0]))[0]
+            inactive.update(path for path, _ in candidates if path != selected)
+        if statistics is not None:
+            statistics["npm_duplicate_snapshots_skipped"] += len(inactive)
     for path, payload in archive_records(dataset, manifest["shards"]["raw"][source]):
         # npm discovery responses are archived too; only active packuments have state markers.
         if source == "npm" and path.startswith(("raw/npm-search/", "raw/npm-registry-index/")):
@@ -121,6 +139,8 @@ def raw_records(dataset, manifest, source, version):
             raise ValueError(f"raw response has no unique active state: {path}")
         if hashlib.sha256(payload).hexdigest() != state["raw_sha256"]:
             raise ValueError(f"raw SHA-256 mismatch: {path}")
+        if path in inactive:
+            continue
         provenance = {key: state.get(key) for key in PROVENANCE}
         uuid.UUID(provenance["snapshot_id"])
         if any(not isinstance(v, str) or not v for key, v in provenance.items() if key != "retrieved_at"):
@@ -391,7 +411,8 @@ def run(dataset: Path, output_dir: Path | None = None):
                         depsdev_skipped_edges=0, parser_warnings=0)
         with (staging / "warnings.jsonl").open("w", encoding="utf-8") as warnings_file:
             for source in ("npm", "depsdev"):
-                for number, (document, provenance, state) in enumerate(raw_records(dataset, manifest, source, fingerprint), 1):
+                for number, (document, provenance, state) in enumerate(
+                        raw_records(dataset, manifest, source, fingerprint, stats), 1):
                     stats[source + "_raw_responses"] += 1
                     if source == "npm":
                         package, versions, requirements, warnings = npm.normalize_packument(document, provenance)
