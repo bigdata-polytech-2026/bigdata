@@ -58,7 +58,10 @@ class SnapshotHttpClient(HttpClient):
                     deadline = time.monotonic() + self.total_timeout
                     chunks = []
                     while True:
-                        block = response.read(64 * 1024)
+                        # read1 returns currently available decrypted bytes instead of
+                        # waiting to fill the requested buffer, so trickle responses
+                        # cannot evade the absolute deadline.
+                        block = response.read1(64 * 1024)
                         if not block:
                             break
                         chunks.append(block)
