@@ -50,13 +50,22 @@ def archive_records(dataset, shards):
         if digest(path) != shard["sha256"]:
             raise ValueError(f"archive SHA-256 mismatch: {path}")
         count = 0
+        members = {}
         with tarfile.open(path, "r|gz") as archive:
             for member in archive:
                 safe_path(member.name)
                 if not member.isfile():
                     raise ValueError(f"unexpected non-file archive member: {member.name}")
                 with archive.extractfile(member) as stream:
-                    yield member.name, stream.read()
+                    payload = stream.read()
+                payload_hash = hashlib.sha256(payload).digest()
+                previous = members.get(member.name)
+                if previous is not None:
+                    if previous != payload_hash:
+                        raise ValueError(f"conflicting duplicate archive member: {path}:{member.name}")
+                    continue
+                members[member.name] = payload_hash
+                yield member.name, payload
                 count += 1
         if count != shard["files"]:
             raise ValueError(f"archive member count mismatch: {path}")

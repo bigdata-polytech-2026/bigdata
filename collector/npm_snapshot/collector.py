@@ -295,11 +295,13 @@ class NpmSnapshotCollector:
                     index += 1
             else:
                 batch_names = []
+                selected = set()
                 while index < len(names) and len(batch_names) < limit:
                     name = names[index]
                     index += 1
-                    if not self.expand_dependencies or name not in completed:
+                    if (not self.expand_dependencies or name not in completed) and name not in selected:
                         batch_names.append(name)
+                        selected.add(name)
                 if not batch_names:
                     continue
             record = self._batch(number, batch_names)
@@ -591,6 +593,8 @@ class NpmSnapshotCollector:
             if record.get("names") == list(names) and reusable_failures and has_expansion:
                 self._verify_record(record)
                 return record
+        if len(set(names)) != len(names):
+            raise ValueError(f"batch {number} contains duplicate package names")
         raw_destination = self.build_dir / "raw" / "npm" / f"part-{number:05d}.tar.gz"
         audit_destination = self.build_dir / "audit" / "npm" / f"part-{number:05d}.tar.gz"
         raw_destination.parent.mkdir(parents=True, exist_ok=True)
