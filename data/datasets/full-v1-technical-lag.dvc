@@ -1,0 +1,6 @@
+outs:
+- md5: 7df9a295a3df429579bd94c91200abff.dir
+  size: 931557340
+  nfiles: 4
+  hash: md5
+  path: full-v1-technical-lag

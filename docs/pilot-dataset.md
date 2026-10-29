@@ -93,6 +93,20 @@ npm ci --prefix processing/technical_lag --ignore-scripts
 `data/datasets/pilot-v1-technical-lag/technical_lag/`; подробности — в
 [processing/technical_lag/README.md](../processing/technical_lag/README.md).
 
+OSV security-признаки формируются отдельным downstream stage, также без изменения
+pilot snapshot и основного normalized dataset:
+
+```bash
+.venv/bin/python -m pip install -r processing/security/requirements.txt
+.venv/bin/dvc repro security_enrichment_pilot
+```
+
+Результат находится в `data/datasets/pilot-v1-security/security/`: одна строка
+на npm package version содержит признак уязвимости, связанные OSV IDs, severity и
+наличие фиксированной версии. Статистика сопоставления и отдельная таблица ошибочных
+либо неоднозначных OSV records сохраняются вместе с результатом. Детали описаны в
+[processing/security/README.md](../processing/security/README.md).
+
 Для анализа динамики lag stage `temporal_pilot` строит ограниченный исторический
 набор: до 100 000 dependency relations и до 12 состояний на relation. Наблюдения
 привязаны к публикации consumer и следующим dependency releases, но никогда не

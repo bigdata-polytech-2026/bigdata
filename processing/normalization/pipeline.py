@@ -50,13 +50,22 @@ def archive_records(dataset, shards):
         if digest(path) != shard["sha256"]:
             raise ValueError(f"archive SHA-256 mismatch: {path}")
         count = 0
+        members = {}
         with tarfile.open(path, "r|gz") as archive:
             for member in archive:
                 safe_path(member.name)
                 if not member.isfile():
                     raise ValueError(f"unexpected non-file archive member: {member.name}")
                 with archive.extractfile(member) as stream:
-                    yield member.name, stream.read()
+                    payload = stream.read()
+                payload_hash = hashlib.sha256(payload).digest()
+                previous = members.get(member.name)
+                if previous is not None:
+                    if previous != payload_hash:
+                        raise ValueError(f"conflicting duplicate archive member: {path}:{member.name}")
+                    continue
+                members[member.name] = payload_hash
+                yield member.name, payload
                 count += 1
         if count != shard["files"]:
             raise ValueError(f"archive member count mismatch: {path}")
@@ -74,6 +83,8 @@ def states(dataset, manifest, source):
         if state.get("http_status") != 200:
             raise ValueError(f"non-successful state: {name}")
         result[path] = state
+    if not result and not manifest["shards"]["raw"].get(source) and not manifest["shards"]["audit"].get(source):
+        return result
     if not result:
         raise ValueError(f"no successful {source} states")
     if source == "depsdev" and any("retrieved_at" not in state for state in result.values()):
@@ -99,17 +110,37 @@ def states(dataset, manifest, source):
     return result
 
 
-def raw_records(dataset, manifest, source, version):
+def raw_records(dataset, manifest, source, version, statistics=None):
     remaining = states(dataset, manifest, source)
+    inactive = set()
+    if source == "npm":
+        by_package = {}
+        for path, state in remaining.items():
+            package_name = state.get("package_name", state.get("requested_name"))
+            if not isinstance(package_name, str) or not package_name:
+                raise ValueError(f"npm state has no package identity: {path}")
+            by_package.setdefault(package_name, []).append((path, state))
+        for package_name, candidates in by_package.items():
+            if len(candidates) == 1:
+                continue
+            hashes = {state["raw_sha256"] for _, state in candidates}
+            if len(hashes) != 1:
+                raise ValueError(f"conflicting npm snapshots for package: {package_name}")
+            selected = min(candidates, key=lambda item: (item[1]["retrieved_at"], item[0]))[0]
+            inactive.update(path for path, _ in candidates if path != selected)
+        if statistics is not None:
+            statistics["npm_duplicate_snapshots_skipped"] += len(inactive)
     for path, payload in archive_records(dataset, manifest["shards"]["raw"][source]):
         # npm discovery responses are archived too; only active packuments have state markers.
-        if path.startswith("raw/npm-search/") and source == "npm":
+        if source == "npm" and path.startswith(("raw/npm-search/", "raw/npm-registry-index/")):
             continue
         state = remaining.pop(path, None)
         if state is None:
             raise ValueError(f"raw response has no unique active state: {path}")
         if hashlib.sha256(payload).hexdigest() != state["raw_sha256"]:
             raise ValueError(f"raw SHA-256 mismatch: {path}")
+        if path in inactive:
+            continue
         provenance = {key: state.get(key) for key in PROVENANCE}
         uuid.UUID(provenance["snapshot_id"])
         if any(not isinstance(v, str) or not v for key, v in provenance.items() if key != "retrieved_at"):
@@ -182,8 +213,12 @@ def sql_string(value):
 
 def analyze(directory, duckdb):
     db = duckdb.connect()
-    db.execute("SET memory_limit='1GB'")
+    # The full snapshot contains tens of millions of declarations.  A 1 GiB
+    # cap leaves DuckDB no room for the final compressed COPY after its joins
+    # have filled the buffer pool, even though the operators can spill.
+    db.execute("SET memory_limit='3GB'")
     db.execute("SET threads=4")
+    db.execute("SET preserve_insertion_order=false")
     db.execute(f"SET temp_directory={sql_string(directory / 'spill')}")
     checks = {}
 
@@ -380,7 +415,8 @@ def run(dataset: Path, output_dir: Path | None = None):
                         depsdev_skipped_edges=0, parser_warnings=0)
         with (staging / "warnings.jsonl").open("w", encoding="utf-8") as warnings_file:
             for source in ("npm", "depsdev"):
-                for number, (document, provenance, state) in enumerate(raw_records(dataset, manifest, source, fingerprint), 1):
+                for number, (document, provenance, state) in enumerate(
+                        raw_records(dataset, manifest, source, fingerprint, stats), 1):
                     stats[source + "_raw_responses"] += 1
                     if source == "npm":
                         package, versions, requirements, warnings = npm.normalize_packument(document, provenance)
