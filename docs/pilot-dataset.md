@@ -107,6 +107,19 @@ pilot snapshot и основного normalized dataset:
 либо неоднозначных OSV records сохраняются вместе с результатом. Детали описаны в
 [processing/security/README.md](../processing/security/README.md).
 
+Для анализа динамики lag stage `temporal_pilot` строит ограниченный исторический
+набор: до 100 000 dependency relations и до 12 состояний на relation. Наблюдения
+привязаны к публикации consumer и следующим dependency releases, но никогда не
+выходят за время получения обоих Registry snapshots:
+
+```bash
+.venv/bin/dvc repro temporal_pilot
+```
+
+Parquet dataset находится в `data/datasets/pilot-v1-temporal/temporal/`.
+Формат, ограничения и ручные проверки границ описаны в
+[processing/temporal/README.md](../processing/temporal/README.md).
+
 ## Результат и публикация
 
 Финальная строка stdout — JSON summary. Основной человекочитаемый результат находится в `data/datasets/pilot-v1/report.md`, полный список shards и checksums — в `manifest.json`.

@@ -1,8 +1,9 @@
 schema: '2.0'
 stages:
   normalize_pilot:
-    cmd: .venv/bin/python bigdata normalize pilot --dataset-dir 
-      data/datasets/pilot-v1 --output-dir 
+    cmd: >-
+      .venv/bin/python bigdata normalize pilot --dataset-dir
+      data/datasets/pilot-v1 --output-dir
       data/datasets/pilot-v1-normalized/normalized
     deps:
     - path: bigdata
@@ -99,9 +100,10 @@ stages:
       size: 27815311
       nfiles: 4
   security_enrichment_pilot:
-    cmd: .venv/bin/python -m processing.security --dataset-dir 
-      data/datasets/pilot-v1 --versions-dir 
-      data/datasets/pilot-v1-normalized/normalized --output-dir 
+    cmd: >-
+      .venv/bin/python -m processing.security --dataset-dir
+      data/datasets/pilot-v1 --versions-dir
+      data/datasets/pilot-v1-normalized/normalized --output-dir
       data/datasets/pilot-v1-security/security
     deps:
     - path: data/datasets/pilot-v1
@@ -131,4 +133,41 @@ stages:
       hash: md5
       md5: bfe234a3ea4ea2799491cd5158f8a498.dir
       size: 1224963
+      nfiles: 4
+  temporal_pilot:
+    cmd: >-
+      .venv/bin/python -m processing.temporal --input-dir
+      data/datasets/pilot-v1-normalized/normalized --output-dir
+      data/datasets/pilot-v1-temporal/temporal
+    deps:
+    - path: data/datasets/pilot-v1-normalized/normalized
+      hash: md5
+      md5: 8f2506a4a6bb555c8064a47355321352.dir
+      size: 65382360
+      nfiles: 10
+    - path: processing/technical_lag/core.cjs
+      hash: md5
+      md5: 092cc0f92f8c1608bc88bc3354ceb388
+      size: 9683
+    - path: processing/technical_lag/runner.cjs
+      hash: md5
+      md5: 4ae5e4c5c00d10edc84b4ec7b5c99e30
+      size: 3332
+    - path: processing/temporal/__main__.py
+      hash: md5
+      md5: 2c732676dbc7d5e4c8dadf4b0c7f5246
+      size: 626
+    - path: processing/temporal/pipeline.py
+      hash: md5
+      md5: c37a8433ad9b551c0c164a3f41d0d0a5
+      size: 7678
+    - path: processing/temporal/requirements.txt
+      hash: md5
+      md5: 9ea36da1c86298dc68cdadfb8f247832
+      size: 30
+    outs:
+    - path: data/datasets/pilot-v1-temporal/temporal
+      hash: md5
+      md5: a6b931e3da07ff0b538e7dd11d018e55.dir
+      size: 26562816
       nfiles: 4
