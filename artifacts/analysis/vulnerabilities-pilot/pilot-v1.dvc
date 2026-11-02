@@ -1,0 +1,6 @@
+outs:
+- md5: aaa0884adcad39d1e33de966ec09e22d.dir
+  size: 238673
+  nfiles: 10
+  hash: md5
+  path: pilot-v1
