@@ -1,0 +1,2 @@
+# Preserve generated CSV bytes referenced by audit manifest checksums.
+/artifacts/ml-scope/**/*.csv -text

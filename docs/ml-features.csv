@@ -1,0 +1,21 @@
+feature,origin,time_availability,definition,status
+current_time_lag_days,technical lag core,t,Publication-date difference at t; retain negative values and flag,allowed
+current_version_lag,technical lag core,t,Count stable available releases greater than v_req(t),allowed
+major_minor_patch,technical lag core,t,One-hot update_type at t; major constant in incident risk set,allowed
+constraint_type,A7 classifier,t,Classify original requirement at t with pinned node-semver,allowed
+consumer_age_days,npm time.created,t,t minus created_at; missing if negative or absent,allowed
+consumer_stable_age_days,npm stable history,t,t minus first stable publication no later than t,allowed
+dependency_age_days,npm time.created,t,t minus dependency created_at; missing if negative or absent,allowed
+dependency_releases_90d,npm version history,t,Stable releases in (t-90 days;t],allowed
+dependency_releases_365d,npm version history,t,Stable releases in (t-365 days;t]; count is annual cadence,allowed
+production_dependency_count,npm consumer manifest,t,Dependencies minus names shadowed by optionalDependencies,allowed
+consumer_releases_365d,npm version history,t,Consumer stable releases in (t-365 days;t],allowed
+prior_version_lag_30d,historical process,t-30 days,Latest published stable consumer state at t-30 days and dependency releases up to that instant; NULL if not calculable,allowed_derived
+prior_version_lag_90d,historical process,t-90 days,Same reconstruction at t-90 days; not current manifest before it existed,allowed_derived
+prior_major_30d,historical process,t-30 days,One-hot prior update_type; NULL for absent or unresolvable state,allowed_derived
+nonmonotone_publish_order,technical lag core,t,Diagnostic from releases available at t,allowed
+missing_feature_indicators,permitted features,t,Indicator before train-fitted imputation,allowed
+package_identifiers,npm manifest,t,Join and cluster keys only; never predictors,excluded
+resolved_graph_features,deps.dev,no historical timestamp guarantee,full-v1 has no resolved graph rows,excluded
+OSV_features,OSV,no point-in-time snapshot history,Do not use current security enrichment to describe knowledge at t,excluded
+popularity_deprecation_repository,npm current packument,no historical versioning,Current downloads stars deprecation and top-level mutable fields,excluded

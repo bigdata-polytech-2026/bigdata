@@ -1,0 +1,45 @@
+{
+  "analysis": "ml-scope",
+  "input_manifests": {
+    "data/datasets/full-v1-normalized/normalized/normalization-manifest.json": "b4560e99e8a3a4e83e3799fea3989d5de175d08d64766cdc4dd626c1909254b9",
+    "data/datasets/full-v1-technical-lag/technical_lag/technical-lag-manifest.json": "27a024bb8c588a30a73630cdef777cbd55dba307803e7c738497bb98b9f4a096"
+  },
+  "limit": 60000,
+  "outputs": [
+    {
+      "bytes": 162,
+      "path": "dates.csv",
+      "sha256": "b8d9756c63974cb9757307391d47317b23cf9bae7a2b490f482fd4108c12b786"
+    },
+    {
+      "bytes": 95372283,
+      "path": "endpoint-audit.json",
+      "sha256": "ca74a1bf32a5dbd90e78048beaa0afcb764fb58067d621774d74097afba98ffa"
+    },
+    {
+      "bytes": 464,
+      "path": "horizons.csv",
+      "sha256": "454ae1f695f76cdf308b968499805bbe9c7249cd5a66b5202dc7a954cb86f83f"
+    },
+    {
+      "bytes": 196,
+      "path": "population.csv",
+      "sha256": "9f8afda821ad1b42f68a88e855913f51e664692646bf38b860796e05abf2ecfb"
+    },
+    {
+      "bytes": 1682,
+      "path": "split.csv",
+      "sha256": "c40b884066390e14a2921ca6c53c6509505c20ecbc0a5f886f5ea98cb6e152d0"
+    },
+    {
+      "bytes": 1501,
+      "path": "yearly.csv",
+      "sha256": "27f6a89bc2257bc44f75f2b13b807841b564c7df225e9a78d438270138fa52ae"
+    }
+  ],
+  "sources": {
+    "/Users/nikitadyuckov/Documents/GitHub/bigdata/ml/scope/audit.py": "f7888ab02130b207e65a1abc70a5e02ae0975dd70c617eab103ee91978067302",
+    "ml/scope/evaluate.cjs": "45dc551887a154d8324457a631bc20b83e47f0f89905a98b5c56edc046262c99",
+    "processing/technical_lag/core.cjs": "51f4c0db68e3da0ba00a691adaac2fd2e01e37727989b7d4a1333c8a05b94c35"
+  }
+}

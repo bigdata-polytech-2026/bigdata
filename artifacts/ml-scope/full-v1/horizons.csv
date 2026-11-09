@@ -1,0 +1,17 @@
+horizon,reason,label,observations
+90,consumer_release_time_tie,,6
+90,dependency_removed,0,4628
+90,future_out_of_scope,,972
+90,ok,0,12809
+90,ok,1,38184
+90,prerelease_requirement,,26
+90,right_censored,,1758
+90,unsupported_requirement,,16
+180,consumer_release_time_tie,,3
+180,dependency_removed,0,5778
+180,future_out_of_scope,,1295
+180,ok,0,14785
+180,ok,1,31987
+180,prerelease_requirement,,37
+180,right_censored,,4493
+180,unsupported_requirement,,21

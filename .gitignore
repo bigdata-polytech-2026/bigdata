@@ -36,3 +36,7 @@ data/**
 
 # macOS
 .DS_Store
+
+# ML scope audit: bounded aggregate statistics, no endpoint rows.
+!/artifacts/ml-scope/**/*.csv
+!/artifacts/ml-scope/**/analysis-manifest.json
