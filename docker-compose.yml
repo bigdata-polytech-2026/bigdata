@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    image: bigdata-distribution:a11
+    working_dir: /workspace/${PROJECT_SUBDIR:-.}
+    init: true
+    mem_limit: ${BIGDATA_MEMORY:-4g}
+    cpus: ${BIGDATA_CPUS:-2}
+    environment:
+      DVC_CACHE_DIR: ${DVC_CACHE_DIR:-}
+      AWS_PROFILE: ${AWS_PROFILE:-technical-lag}
+      AWS_CONFIG_FILE: /run/aws/config
+      AWS_SHARED_CREDENTIALS_FILE: /run/aws/credentials
+      AWS_EC2_METADATA_DISABLED: "true"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      VECLIB_MAXIMUM_THREADS: "1"
+    volumes:
+      - ${PROJECT_STORAGE_ROOT:-.}:/workspace
+      - technical_node:/workspace/${PROJECT_SUBDIR:-.}/processing/technical_lag/node_modules
+      - normalization_node:/workspace/${PROJECT_SUBDIR:-.}/processing/normalization/node_modules
+      - type: bind
+        source: ${AWS_DIR:-./infra/empty-aws}
+        target: /run/aws
+        read_only: true
+        bind:
+          create_host_path: false
+volumes:
+  technical_node:
+  normalization_node:

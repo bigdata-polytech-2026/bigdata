@@ -1,0 +1,6 @@
+outs:
+- md5: ee7ed0fc8cbbec085fac95b8a60c273f.dir
+  size: 54318
+  nfiles: 2
+  hash: md5
+  path: pilot-osv

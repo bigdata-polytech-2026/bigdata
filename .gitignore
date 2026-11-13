@@ -40,3 +40,6 @@ data/**
 # ML scope audit: bounded aggregate statistics, no endpoint rows.
 !/artifacts/ml-scope/**/*.csv
 !/artifacts/ml-scope/**/analysis-manifest.json
+
+# Reproducibility evidence: small structured summary, not logs or datasets.
+!/artifacts/reproducibility-check/*.json

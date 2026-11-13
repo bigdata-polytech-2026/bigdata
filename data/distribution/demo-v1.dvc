@@ -1,0 +1,6 @@
+outs:
+- md5: d622859dd1de76d2ec50b21b742d5756.dir
+  size: 766029
+  nfiles: 14
+  hash: md5
+  path: demo-v1
