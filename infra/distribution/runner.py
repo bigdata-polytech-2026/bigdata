@@ -47,7 +47,7 @@ def signature(inputs,params):
             if p.suffix not in ('.py','.cjs','.json','.lock') or any(s in p.parts for s in ('node_modules','__pycache__','coverage')):continue
             code.append((str(p),digest(p)))
     payload=dict(inputs={str(p):digest(p) for p in inputs},parameters=params,source=code,
-                 runtime=sys.version.split()[0],lock=digest(Path('infra/distribution/requirements.lock')))
+                 runtime=sys.version.split()[0],lock=digest(Path('infra/distribution/requirements.lock')),container=digest(Path('Dockerfile')))
     return hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()[:16],payload
 
 def stage(mode,name,inputs,params,work):
