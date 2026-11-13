@@ -2,7 +2,7 @@
 import os,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from infra.distribution.runner import stage,require
+from infra.distribution.runner import stage,require,data
 from analysis.common import digest
 
 class DistributionTest(unittest.TestCase):
@@ -36,3 +36,8 @@ class DistributionTest(unittest.TestCase):
     def test_missing_data_message_names_recovery_command(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(ValueError,'make data'):require(Path(temp)/'missing')
+
+    def test_missing_credentials_is_explicit_without_live_network(self):
+        from botocore.exceptions import ProfileNotFound
+        with patch('botocore.session.Session',side_effect=ProfileNotFound(profile='absent')):
+            with self.assertRaisesRegex(ValueError,'DVC/S3 credentials unavailable'):data('demo')

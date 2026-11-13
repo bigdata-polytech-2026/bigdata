@@ -27,10 +27,10 @@ def data(mode):
     targets={'demo':['data/distribution/demo-v1.dvc','data/distribution/pilot-osv.dvc'],'full':FULL_TARGETS,
              'ml':['artifacts/ml/full-v1-corrected-v2.dvc'],'raw':['data/datasets/full-v1.dvc']}[mode]
     # Credentials remain mounted read-only or supplied by the standard AWS provider chain.
-    import boto3
+    from botocore.session import Session
     profile=os.environ.get('AWS_PROFILE','technical-lag')
     try:
-        session=boto3.Session(profile_name=profile if not os.environ.get('AWS_ACCESS_KEY_ID') else None)
+        session=Session(profile=profile)
         if session.get_credentials() is None:raise ValueError('no AWS credentials')
     except Exception as exc:raise ValueError('DVC/S3 credentials unavailable. Set AWS_PROFILE and AWS_DIR in .env; see README Data. No credentials belong in source code.') from exc
     subprocess.run(['dvc','remote','modify','--local','yandex-s3','profile',profile],check=True)

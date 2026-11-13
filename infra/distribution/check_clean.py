@@ -32,6 +32,7 @@ def main():
         with env.open('a') as f:f.write('\nCOMPOSE_PROJECT_NAME=bigdata-a11-check\n')
         command('setup',['make','setup'],clone)
         command('missing-credentials',['make','data'],clone,False)
+        assert 'DVC/S3 credentials unavailable' in (logs/'missing-credentials.log').read_text(), 'wrong missing-credentials failure'
         with env.open('a') as f:f.write(f'\nAWS_DIR={a.aws_dir.resolve()}\nAWS_PROFILE={a.profile}\n')
         command('data-demo',['make','data'],clone)
         command('tests',['make','test'],clone)
